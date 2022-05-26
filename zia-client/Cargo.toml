@@ -1,0 +1,11 @@
+[package]
+name = "zia-client"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+tokio = { version = "1.18", features = ["macros", "rt-multi-thread", "net", "signal", "io-util"] }
+httparse = "1.7"
+anyhow = "1.0"
