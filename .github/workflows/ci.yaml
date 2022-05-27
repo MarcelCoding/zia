@@ -53,7 +53,7 @@ jobs:
         if: matrix.os == 'windows'
         run: mv target/release/zia-${{ matrix.component }}.exe zia-${{ matrix.component }}_${{ matrix.os }}.exe
 
-      - uses: actions/upload-artifact@v2
+      - uses: actions/upload-artifact@v3
         if: ${{ matrix.channel == 'stable' }}
         with:
           name: zia-${{ matrix.component }}_${{ matrix.os }}
