@@ -1,0 +1,67 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ '*' ]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ${{ format('{0}-latest', matrix.os) }}
+
+    strategy:
+      matrix:
+        channel: [ stable ]
+        os: [ windows, ubuntu, macos ]
+        component: [ client, server ]
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ matrix.component }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-${{ matrix.component }}-
+
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: ${{ matrix.channel }}
+          target: ${{ matrix.target }}
+          override: true
+
+      - name: Build
+        continue-on-error: ${{ matrix.channel != 'stable' }}
+        run: cargo build --release --package zia-${{ matrix.component }} --bin zia-${{ matrix.component }}
+
+      - name: Rename binary
+        if: matrix.os != 'windows'
+        run: mv target/release/zia-${{ matrix.component }} zia-${{ matrix.component }}_${{ matrix.os }}
+
+      - name: Rename binary (win)
+        if: matrix.os == 'windows'
+        run: mv target/release/zia-${{ matrix.component }}.exe zia-${{ matrix.component }}_${{ matrix.os }}.exe
+
+      - uses: actions/upload-artifact@v2
+        if: ${{ matrix.channel == 'stable' }}
+        with:
+          name: zia-${{ matrix.component }}_${{ matrix.os }}
+          path: zia-${{ matrix.component }}_${{ matrix.os }}*
+
+      - uses: alexellis/upload-assets@0.3.0
+        if: startsWith(github.ref, 'refs/tags/') && matrix.channel == 'stable'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        with:
+          asset_paths: '["zia-${{ matrix.component }}_${{ matrix.os }}*"]'
