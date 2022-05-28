@@ -1,16 +1,20 @@
-use std::net::SocketAddr;
+use tokio::net::{TcpStream, ToSocketAddrs};
 
+pub use self::direct::*;
 pub use self::ws::*;
 
+mod direct;
 mod ws;
 
+#[async_trait::async_trait]
 pub trait Upstream {
   type Conn: Connection;
 
-  fn connect(&self, addr: SocketAddr) -> anyhow::Result<Self::Conn>;
+  async fn connect<A: ToSocketAddrs + Send>(&self, addr: A) -> anyhow::Result<Self::Conn>;
 }
 
+#[async_trait::async_trait]
 pub trait Connection {
   // todo:
-  fn mount() -> anyhow::Result<()>;
+  async fn mount(mut self, inbound: TcpStream) -> anyhow::Result<()>;
 }

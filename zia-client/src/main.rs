@@ -2,13 +2,16 @@ extern crate core;
 
 use std::net::SocketAddr;
 use std::str;
+use std::sync::Arc;
 
 use anyhow::anyhow;
 use httparse::Request;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::tcp::ReadHalf;
 use tokio::net::{TcpListener, TcpStream};
-use tokio::{io, select, try_join};
+use tokio::select;
+
+use crate::upstream::{Connection, DirectUpstream, Upstream};
 
 mod upstream;
 
@@ -31,12 +34,15 @@ async fn main() -> anyhow::Result<()> {
 }
 
 async fn accept_connections(addr: SocketAddr) -> anyhow::Result<()> {
+  let upstream = Arc::new(DirectUpstream {});
   let listener = TcpListener::bind(addr).await?;
   println!("Listening on {}...", addr);
 
   loop {
     let (sock, _) = listener.accept().await?;
-    tokio::spawn(handle(sock));
+    let up = upstream.clone();
+
+    tokio::spawn(async move { handle(up, sock).await.unwrap() });
   }
 }
 
@@ -46,41 +52,25 @@ const HTTP_HEADER_END: [u8; 4] = [0xd, 0xa, 0xd, 0xa];
 // 200 Ok\r\n\r\n
 const HTTP_OK: [u8; 10] = [0x32, 0x30, 0x30, 0x20, 0x4f, 0x6b, 0xd, 0xa, 0xd, 0xa];
 
-async fn handle(mut inbound: TcpStream) -> anyhow::Result<()> {
+async fn handle<U: Upstream>(upstream: Arc<U>, mut inbound: TcpStream) -> anyhow::Result<()> {
   // inbound
   let (mut ri, mut wi) = inbound.split();
 
   let dest = read_host(&mut ri).await?;
 
-  // outbound
-  let mut outbound = create_outbound(&dest).await?;
-  let (mut ro, mut wo) = outbound.split();
+  println!("> Connecting {}...", dest);
+  let conn = upstream.connect(&dest).await?;
 
   // connection successful
   wi.write_all(&HTTP_OK).await?;
 
-  let client_to_server = async {
-    io::copy(&mut ri, &mut wo).await?;
-    wo.shutdown().await
-  };
+  println!("+ Connection to {} opened...", dest);
 
-  let server_to_client = async {
-    io::copy(&mut ro, &mut wi).await?;
-    wi.shutdown().await
-  };
-
-  try_join!(client_to_server, server_to_client)?;
+  conn.mount(inbound).await?;
 
   println!("- Connection to {} closed...", dest);
 
   Ok(())
-}
-
-async fn create_outbound(dest: &String) -> anyhow::Result<TcpStream> {
-  println!("> Connecting to {}...", dest);
-  let outbound = TcpStream::connect(dest).await?;
-  println!("+ Opened connection to {}...", dest);
-  Ok(outbound)
 }
 
 async fn read_host(rx: &mut ReadHalf<'_>) -> anyhow::Result<String> {
