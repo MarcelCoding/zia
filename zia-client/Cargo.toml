@@ -7,6 +7,9 @@ edition = "2021"
 
 [dependencies]
 tokio = { version = "1.19", features = ["macros", "rt-multi-thread", "net", "signal", "io-util"] }
+tokio-tungstenite = "0.17"
+futures-util = "0.3"
 async-trait = "0.1"
 httparse = "1.7"
 anyhow = "1.0"
+url = "2.2"

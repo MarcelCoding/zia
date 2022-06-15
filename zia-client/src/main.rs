@@ -7,8 +7,8 @@ use std::sync::Arc;
 use anyhow::anyhow;
 use httparse::Request;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::net::tcp::ReadHalf;
 use tokio::net::{TcpListener, TcpStream};
+use tokio::net::tcp::ReadHalf;
 use tokio::select;
 
 use crate::upstream::{Connection, DirectUpstream, Upstream};
@@ -42,7 +42,11 @@ async fn accept_connections(addr: SocketAddr) -> anyhow::Result<()> {
     let (sock, _) = listener.accept().await?;
     let up = upstream.clone();
 
-    tokio::spawn(async move { handle(up, sock).await.unwrap() });
+    tokio::spawn(async move {
+      if let Err(err) = handle(up, sock).await {
+        eprintln!("Error while handling connection: {:?}", err);
+      }
+    });
   }
 }
 

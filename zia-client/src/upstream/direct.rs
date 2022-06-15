@@ -1,6 +1,6 @@
-use tokio::io::AsyncWriteExt;
-use tokio::net::{TcpStream, ToSocketAddrs};
 use tokio::{io, try_join};
+use tokio::io::AsyncWriteExt;
+use tokio::net::TcpStream;
 
 use crate::upstream::{Connection, Upstream};
 
@@ -10,7 +10,7 @@ pub struct DirectUpstream {}
 impl Upstream for DirectUpstream {
   type Conn = DirectConnection;
 
-  async fn connect<A: ToSocketAddrs + Send>(&self, addr: A) -> anyhow::Result<Self::Conn> {
+  async fn connect(&self, addr: &str) -> anyhow::Result<Self::Conn> {
     let outbound = TcpStream::connect(addr).await?;
     Ok(DirectConnection { outbound })
   }
