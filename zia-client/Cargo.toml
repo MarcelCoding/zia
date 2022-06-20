@@ -6,10 +6,14 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-tokio = { version = "1.19", features = ["macros", "rt-multi-thread", "net", "signal", "io-util"] }
-tokio-tungstenite = "0.17"
-futures-util = "0.3"
+tokio = { version = "1.19", default-features = false, features = ["macros", "rt-multi-thread", "net", "signal", "io-util"] }
+futures-util = { version = "0.3", default-features = false, features = ["sink"] }
+tokio-tungstenite = { version = "0.17", features = ["rustls-tls-webpki-roots"] }
+tracing-subscriber = { version = "0.3", features = ["tracing-log"] }
+tokio-rustls = "0.23"
+webpki-roots = "0.22"
 async-trait = "0.1"
 httparse = "1.7"
+tracing = "0.1"
 anyhow = "1.0"
 url = "2.2"

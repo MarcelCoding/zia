@@ -7,36 +7,74 @@ use std::sync::Arc;
 use anyhow::anyhow;
 use httparse::Request;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::net::{TcpListener, TcpStream};
 use tokio::net::tcp::ReadHalf;
-use tokio::select;
+use tokio::net::{TcpListener, TcpStream};
+use tokio::{select, signal};
+use tracing::{error, info};
 
-use crate::upstream::{Connection, DirectUpstream, Upstream};
+use url::Url;
+
+use crate::upstream::{Connection, Upstream, WsUpstream};
 
 mod upstream;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+  tracing_subscriber::fmt::init();
+
   let addr: SocketAddr = "127.0.0.1:8080".parse()?;
 
   select! {
     result = accept_connections(addr) => {
       result?;
-      println!("Socket closed, quitting...");
+      info!("Socket closed, quitting...");
     },
-    result = tokio::signal::ctrl_c() => {
+    result = shutdown_signal() => {
       result?;
-      println!("Received ctrl-c, quitting...");
-    },
+      info!("Termination signal received, quitting...")
+    }
   }
 
   Ok(())
 }
 
+async fn shutdown_signal() -> anyhow::Result<()> {
+  let ctrl_c = async {
+    signal::ctrl_c()
+      .await
+      .expect("failed to install Ctrl+C handler")
+  };
+
+  #[cfg(unix)]
+  {
+    let terminate = async {
+      signal::unix::signal(signal::unix::SignalKind::terminate())
+        .expect("failed to install signal handler")
+        .recv()
+        .await;
+    };
+
+    tokio::select! {
+      _ = ctrl_c => {},
+      _ = terminate => {},
+    }
+
+    Ok(())
+  }
+
+  #[cfg(not(unix))]
+  {
+    ctrl_c.await;
+    Ok(())
+  }
+}
+
 async fn accept_connections(addr: SocketAddr) -> anyhow::Result<()> {
-  let upstream = Arc::new(DirectUpstream {});
+  let upstream = Arc::new(WsUpstream {
+    url: Url::parse("ws://127.0.0.1:1234")?,
+  });
   let listener = TcpListener::bind(addr).await?;
-  println!("Listening on {}...", addr);
+  info!("Listening on {}...", addr);
 
   loop {
     let (sock, _) = listener.accept().await?;
@@ -44,7 +82,7 @@ async fn accept_connections(addr: SocketAddr) -> anyhow::Result<()> {
 
     tokio::spawn(async move {
       if let Err(err) = handle(up, sock).await {
-        eprintln!("Error while handling connection: {:?}", err);
+        error!("Error while handling connection: {:?}", err);
       }
     });
   }
@@ -62,17 +100,17 @@ async fn handle<U: Upstream>(upstream: Arc<U>, mut inbound: TcpStream) -> anyhow
 
   let dest = read_host(&mut ri).await?;
 
-  println!("> Connecting {}...", dest);
+  info!("> Connecting {}...", dest);
   let conn = upstream.connect(&dest).await?;
 
   // connection successful
   wi.write_all(&HTTP_OK).await?;
 
-  println!("+ Connection to {} opened...", dest);
+  info!("+ Connection to {} opened...", dest);
 
   conn.mount(inbound).await?;
 
-  println!("- Connection to {} closed...", dest);
+  info!("- Connection to {} closed...", dest);
 
   Ok(())
 }

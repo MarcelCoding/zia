@@ -1,10 +1,10 @@
-use tokio::{io, try_join};
 use tokio::io::AsyncWriteExt;
 use tokio::net::TcpStream;
+use tokio::{io, try_join};
 
 use crate::upstream::{Connection, Upstream};
 
-pub struct DirectUpstream {}
+pub(crate) struct DirectUpstream {}
 
 #[async_trait::async_trait]
 impl Upstream for DirectUpstream {
@@ -16,7 +16,7 @@ impl Upstream for DirectUpstream {
   }
 }
 
-pub struct DirectConnection {
+pub(crate) struct DirectConnection {
   outbound: TcpStream,
 }
 
@@ -37,6 +37,8 @@ impl Connection for DirectConnection {
     };
 
     try_join!(client_to_server, server_to_client)?;
+
+    // TODO: close?
 
     Ok(())
   }
