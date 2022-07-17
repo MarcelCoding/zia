@@ -84,36 +84,3 @@ impl Connection for WsConnection {
     Ok(())
   }
 }
-
-// struct WsWrapper {
-//   stream: WebSocketStream<MaybeTlsStream<TcpStream>>,
-//   write: Option<futures_util::sink::Feed<>>
-// }
-
-// impl AsyncRead for WsWrapper {
-//   fn poll_read(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut ReadBuf<'_>) -> Poll<std::io::Result<()>> {
-//     match self.stream.poll_next(ctx) {
-//       Poll::Ready(Some(Ok(message))) => {
-//         buf.put_slice(&message.into_data());
-//         return Poll::Ready(Ok(()));
-//       }
-//       Poll::Ready(Some(Err(err))) => Poll::Ready(Err()),
-//       Poll::Ready(None) => Poll::Pending,
-//       Poll::Pending => Poll::Pending,
-//     }
-//   }
-// }
-//
-// impl AsyncWrite for WsWrapper {
-//   fn poll_write(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8]) -> Poll<Result<usize, std::io::Error>> {
-//     self.stream.send()
-//   }
-//
-//   fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), std::io::Error>> {
-//     todo!()
-//   }
-//
-//   fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), std::io::Error>> {
-//     todo!()
-//   }
-// }

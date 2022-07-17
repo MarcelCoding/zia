@@ -37,7 +37,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
 
       - name: Build
-        run: cargo build --release --package zia-${{ matrix.component }} --bin zia-${{ matrix.component }}
+        run: cargo build --release --package zia-${{ matrix.component }}
 
       - name: Rename binary
         run: mv target/release/zia-${{ matrix.component }} zia-${{ matrix.component }}_${{ matrix.os }}_x86_64
@@ -81,7 +81,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
 
       - name: Build
-        run: cargo build --release --package zia-${{ matrix.component }} --bin zia-${{ matrix.component }}
+        run: cargo build --release --package zia-${{ matrix.component }}
 
       - name: Rename binary
         if: matrix.os != 'windows'
@@ -131,10 +131,10 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
-      - run: cargo install cross --force --git https://github.com/cross-rs/cross
+      - run: cargo install --force cross
 
       - name: Build
-        run: cross build --release --package zia-${{ matrix.component }} --bin zia-${{ matrix.component }}
+        run: cross build --release --target ${{ matrix.target }}  --package zia-${{ matrix.component }}
 
       - name: Rename binary
         if: matrix.os != 'windows'
@@ -146,8 +146,8 @@ jobs:
 
       - uses: actions/upload-artifact@v3
         with:
-          name: zia-${{ matrix.component }}_${{ matrix.os }}_${{ matrix.target }}
-          path: zia-${{ matrix.component }}_${{ matrix.os }}_${{ matrix.target }}*
+          name: zia-${{ matrix.component }}_${{ matrix.target }}
+          path: zia-${{ matrix.component }}_${{ matrix.target }}*
 
       - uses: alexellis/upload-assets@0.3.0
         if: startsWith(github.ref, 'refs/tags/')

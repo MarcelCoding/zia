@@ -89,7 +89,7 @@ async fn handle(raw_downstream: TcpStream, upstream_addr: SocketAddr) -> anyhow:
 
   let (mut wi, mut ri) = downstream.split();
 
-  let upstream = UdpSocket::bind("0.0.0.0:0").await?;
+  let upstream = UdpSocket::bind("0.0.0.0:0").await?; // TODO: maybe make this configurable
 
   upstream.connect(upstream_addr).await?;
 
