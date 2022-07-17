@@ -1,20 +1,26 @@
-use futures_util::{SinkExt, StreamExt};
 use std::net::SocketAddr;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-use tokio::net::{TcpListener, TcpStream};
+use clap::Parser;
+use futures_util::{SinkExt, StreamExt};
+use tokio::net::{TcpListener, TcpStream, UdpSocket};
 use tokio::{select, signal, try_join};
 use tokio_tungstenite::tungstenite::Message;
 use tracing::{error, info};
+
+#[derive(Parser)]
+struct Args {
+  listen_addr: SocketAddr,
+  upstream_addr: SocketAddr,
+}
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
   tracing_subscriber::fmt::init();
 
-  let addr: SocketAddr = "127.0.0.1:1234".parse()?;
+  let args = Args::parse();
 
   select! {
-    result = accept_connections(addr) => {
+    result = accept_connections(args.listen_addr, args.upstream_addr) => {
       result?;
       info!("Socket closed, quitting...");
     },
@@ -58,40 +64,49 @@ async fn shutdown_signal() -> anyhow::Result<()> {
   }
 }
 
-async fn accept_connections(addr: SocketAddr) -> anyhow::Result<()> {
-  let listener = TcpListener::bind(addr).await?;
-  info!("Listening on {}...", addr);
+async fn accept_connections(
+  listen_addr: SocketAddr,
+  upstream_addr: SocketAddr,
+) -> anyhow::Result<()> {
+  let listener = TcpListener::bind(listen_addr).await?;
+  info!("Listening on ws://{}...", listener.local_addr()?);
 
   loop {
     let (sock, _) = listener.accept().await?;
 
     tokio::spawn(async move {
-      if let Err(err) = handle(sock).await {
+      if let Err(err) = handle(sock, upstream_addr).await {
         error!("Error while handling connection: {:?}", err);
       }
     });
   }
 }
 
-async fn handle(stream: TcpStream) -> anyhow::Result<()> {
-  info!("New connection: {}", stream.peer_addr()?);
-  let ws_stream = tokio_tungstenite::accept_async(stream).await?;
+async fn handle(raw_downstream: TcpStream, upstream_addr: SocketAddr) -> anyhow::Result<()> {
+  let downstream_addr = raw_downstream.peer_addr()?;
+  info!("New downstream connection: {}", downstream_addr);
+  let downstream = tokio_tungstenite::accept_async(raw_downstream).await?;
 
-  let (mut wi, mut ri) = ws_stream.split();
+  let (mut wi, mut ri) = downstream.split();
 
-  let next = ri.next().await.unwrap()?.into_text()?;
-  info!("{}", next);
+  let upstream = UdpSocket::bind("0.0.0.0:0").await?;
 
-  let mut stream1 = TcpStream::connect(next).await?;
-  let (mut ro, mut wo) = stream1.split();
+  upstream.connect(upstream_addr).await?;
+
+  info!(
+    "Connected to udp upstream (local: {}/udp, peer: {}/udp) for downstream {}",
+    upstream.local_addr()?,
+    upstream.peer_addr()?,
+    downstream_addr
+  );
 
   let server_to_client = async {
-    let mut buf = [0; 16384];
+    let mut buf = [0; 65507];
 
-    let mut read = ro.read(&mut buf[..]).await?;
+    let mut read = upstream.recv(&mut buf[..]).await?;
     while read > 0 {
       wi.send(Message::binary(&buf[0..read])).await?;
-      read = ro.read(&mut buf[..]).await?;
+      read = upstream.recv(&mut buf[..]).await?;
     }
 
     wi.close().await?;
@@ -100,20 +115,14 @@ async fn handle(stream: TcpStream) -> anyhow::Result<()> {
 
   let client_to_server = async {
     while let Some(next) = ri.next().await {
-      wo.write_all(&next?.into_data()).await?;
+      let x = &next?.into_data();
+      upstream.send(x).await?;
     }
 
-    wo.shutdown().await?;
     Ok::<_, anyhow::Error>(())
   };
 
   try_join!(client_to_server, server_to_client)?;
-
-  // We should not forward messages other than text or binary.
-  // read.try_filter(|msg| future::ready(msg.is_text() || msg.is_binary()))
-  //   .forward(write)
-  //   .await
-  //   .expect("Failed to forward messages")
 
   Ok(())
 }

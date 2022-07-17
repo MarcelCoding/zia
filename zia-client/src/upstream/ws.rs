@@ -1,17 +1,12 @@
-use anyhow::anyhow;
-use futures_util::{SinkExt, Stream, StreamExt};
-use std::pin::Pin;
-use std::sync::Arc;
-use std::task::{Context, Poll};
+use std::net::SocketAddr;
 
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf};
-use tokio::net::TcpStream;
+use futures_util::{SinkExt, StreamExt};
+use tokio::net::{TcpStream, UdpSocket};
+use tokio::sync::RwLock;
 use tokio::try_join;
-use tokio_rustls::rustls::ClientConfig;
-use tokio_rustls::webpki::DnsNameRef;
-use tokio_rustls::TlsConnector;
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream};
+use tracing::warn;
 use url::Url;
 
 use crate::upstream::{Connection, Upstream};
@@ -24,41 +19,41 @@ pub(crate) struct WsUpstream {
 impl Upstream for WsUpstream {
   type Conn = WsConnection;
 
-  async fn connect(&self, addr: &str) -> anyhow::Result<Self::Conn> {
-    let (mut outbound, _) = connect_async(&self.url).await?;
-
-    // let mut config = ClientConfig::new();
-    // config.root_store.add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
-    // let config = TlsConnector::from(Arc::new(config));
-    // let dnsname = DnsNameRef::try_from_ascii_str("www.rust-lang.org").unwrap();
-
-    // config.connect(dnsname, outbound);
-
-    outbound.send(Message::text(addr)).await?;
-
-    Ok(WsConnection { outbound })
-
-    // 3, 8, 13
+  async fn connect(&self) -> anyhow::Result<Self::Conn> {
+    let (outbound, _) = connect_async(&self.url).await?;
+    Ok(WsConnection {
+      inner: outbound,
+      remote_addr: RwLock::new(None),
+    })
   }
 }
 
 pub(crate) struct WsConnection {
-  outbound: WebSocketStream<MaybeTlsStream<TcpStream>>,
+  inner: WebSocketStream<MaybeTlsStream<TcpStream>>,
+  remote_addr: RwLock<Option<SocketAddr>>,
 }
 
 #[async_trait::async_trait]
 impl Connection for WsConnection {
-  async fn mount(mut self, mut inbound: TcpStream) -> anyhow::Result<()> {
-    let (mut ri, mut wi) = inbound.split();
-    let (mut wo, mut ro) = self.outbound.split();
+  async fn mount(mut self, inbound: UdpSocket) -> anyhow::Result<()> {
+    let (mut wo, mut ro) = self.inner.split();
+
+    self.remote_addr = RwLock::new(None);
 
     let client_to_server = async {
-      let mut buf = [0; 16384];
+      // TODO: can this be abused -> receive endless data from the other udp side
+      let mut buf = vec![0; 65507];
 
-      let mut read = ri.read(&mut buf[..]).await?;
+      let (mut read, mut new_addr) = inbound.recv_from(&mut buf[..]).await?;
+      *self.remote_addr.write().await = Some(new_addr);
+
       while read > 0 {
         wo.send(Message::binary(&buf[0..read])).await?;
-        read = ri.read(&mut buf[..]).await?;
+        (read, new_addr) = inbound.recv_from(&mut buf[..]).await?;
+
+        if Some(true) == self.remote_addr.read().await.map(|addr| addr != new_addr) {
+          *self.remote_addr.write().await = Some(new_addr);
+        }
       }
 
       wo.close().await?;
@@ -67,10 +62,18 @@ impl Connection for WsConnection {
 
     let server_to_client = async {
       while let Some(next) = ro.next().await {
-        wi.write_all(&next?.into_data()).await?;
+        let msg = next?;
+
+        if let Some(remote_addr) = *self.remote_addr.read().await {
+          inbound.send_to(&msg.into_data(), remote_addr).await?;
+        } else {
+          warn!(
+            "Dropped a websocket message of length {} because no downstream client is registered.",
+            msg.len()
+          );
+        }
       }
 
-      wi.shutdown().await?;
       Ok::<_, anyhow::Error>(())
     };
 

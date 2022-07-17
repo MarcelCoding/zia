@@ -1,7 +1,6 @@
 [workspace]
 members = [
     "zia-client",
-    "zia-common",
     "zia-server"
 ]
 
