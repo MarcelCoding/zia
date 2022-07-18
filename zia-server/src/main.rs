@@ -1,26 +1,23 @@
 use std::net::SocketAddr;
 
-use clap::Parser;
 use futures_util::{SinkExt, StreamExt};
-use tokio::net::{TcpListener, TcpStream, UdpSocket};
 use tokio::{select, signal, try_join};
+use tokio::net::{TcpListener, TcpStream, UdpSocket};
 use tokio_tungstenite::tungstenite::Message;
 use tracing::{error, info};
 
-#[derive(Parser)]
-struct Args {
-  listen_addr: SocketAddr,
-  upstream_addr: SocketAddr,
-}
+use crate::cfg::ClientCfg;
+
+mod cfg;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
   tracing_subscriber::fmt::init();
 
-  let args = Args::parse();
+  let config = ClientCfg::load()?;
 
   select! {
-    result = accept_connections(args.listen_addr, args.upstream_addr) => {
+    result = accept_connections(config.listen_addr, config.upstream) => {
       result?;
       info!("Socket closed, quitting...");
     },
@@ -66,7 +63,7 @@ async fn shutdown_signal() -> anyhow::Result<()> {
 
 async fn accept_connections(
   listen_addr: SocketAddr,
-  upstream_addr: SocketAddr,
+  upstream: SocketAddr,
 ) -> anyhow::Result<()> {
   let listener = TcpListener::bind(listen_addr).await?;
   info!("Listening on ws://{}...", listener.local_addr()?);
@@ -75,7 +72,7 @@ async fn accept_connections(
     let (sock, _) = listener.accept().await?;
 
     tokio::spawn(async move {
-      if let Err(err) = handle(sock, upstream_addr).await {
+      if let Err(err) = handle(sock, upstream).await {
         error!("Error while handling connection: {:?}", err);
       }
     });

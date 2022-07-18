@@ -1,11 +1,14 @@
 use std::net::SocketAddr;
 
+use async_http_proxy::http_connect_tokio;
 use futures_util::{SinkExt, StreamExt};
 use tokio::net::{TcpStream, UdpSocket};
 use tokio::sync::RwLock;
 use tokio::try_join;
 use tokio_tungstenite::tungstenite::Message;
-use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream};
+use tokio_tungstenite::{
+  client_async_tls_with_config, connect_async, MaybeTlsStream, WebSocketStream,
+};
 use tracing::warn;
 use url::Url;
 
@@ -13,6 +16,7 @@ use crate::upstream::{Connection, Upstream};
 
 pub(crate) struct WsUpstream {
   pub(crate) url: Url,
+  pub(crate) proxy: Option<SocketAddr>,
 }
 
 #[async_trait::async_trait]
@@ -20,7 +24,28 @@ impl Upstream for WsUpstream {
   type Conn = WsConnection;
 
   async fn connect(&self) -> anyhow::Result<Self::Conn> {
-    let (outbound, _) = connect_async(&self.url).await?;
+    let outbound = match self.proxy {
+      None => connect_async(&self.url).await?.0,
+      Some(proxy) => {
+        let mut stream = TcpStream::connect(proxy).await?;
+
+        let host = self
+          .url
+          .host_str()
+          .expect("Upstream url does not contain a host.");
+        let port = self
+          .url
+          .port_or_known_default()
+          .expect("Upstream url does not contain a port.");
+
+        http_connect_tokio(&mut stream, host, port).await?;
+
+        client_async_tls_with_config(&self.url, stream, None, None)
+          .await?
+          .0
+      }
+    };
+
     Ok(WsConnection {
       inner: outbound,
       remote_addr: RwLock::new(None),

@@ -2,36 +2,31 @@ extern crate core;
 
 use std::net::SocketAddr;
 
-use clap::Parser;
 use tokio::{select, signal};
 use tokio::net::UdpSocket;
 use tracing::info;
-use url::Url;
 
+use crate::cfg::ClientCfg;
 use crate::upstream::{Connection, Upstream, WsUpstream};
 
+mod cfg;
 mod upstream;
-
-#[derive(Parser)]
-struct Args {
-  listen_addr: SocketAddr,
-  upstream_url: Url,
-}
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
   tracing_subscriber::fmt::init();
 
-  let args = Args::parse();
+  let config = ClientCfg::load()?;
 
-  info!("Using websocket upstream at {}", args.upstream_url);
+  info!("Using websocket upstream at {}", config.upstream);
 
   let upstream = WsUpstream {
-    url: args.upstream_url,
+    url: config.upstream,
+    proxy: config.proxy,
   };
 
   select! {
-    result = listen(args.listen_addr, upstream) => {
+    result = listen(config.listen_addr, upstream) => {
       result?;
       info!("Socket closed, quitting...");
     },
