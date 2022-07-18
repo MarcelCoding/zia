@@ -3,7 +3,7 @@
 Proxy udp over websocket, usefull to use wireguard in restricted networks
 
 ```mermaid
-graph TD
+graph LR
     WC[Wireguard Client] -->|UDP| B[Zia Client]
     B -->|Websocket| C[Zia Server]
     C -->|UDP| D[Wireguard Server]
@@ -12,7 +12,7 @@ graph TD
 The benefit is that Websocket used Http. If you are in a restricted network where you can only access external services, if you use a provided Http proxy cou can proxy your Wireguard Udp traffic over Websocket. 
 
 ```mermaid
-graph TD
+graph LR
     WC[Wireguard Client] -->|UDP| B[Zia Client]
     B -->|Websocket| C[Http Proxy]
     C -->|Websocket| D[Zia Server]
