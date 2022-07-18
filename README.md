@@ -6,9 +6,9 @@ Basic example:
 
 ```mermaid
 graph LR
-    WC[Wireguard Client] -->|UDP| B[Zia Client]
-    B -->|Websocket| C[Zia Server]
-    C -->|UDP| D[Wireguard Server]
+    WC[Wireguard Client] ---|UDP| B[Zia Client]
+    B ---|Websocket| C[Zia Server]
+    C ---|UDP| D[Wireguard Server]
 ```
 
 The benefit is that Websocket used Http. If you are in a restricted network where you can only access external services,
@@ -16,10 +16,10 @@ if you use a provided Http proxy cou can proxy your Wireguard Udp traffic over W
 
 ```mermaid
 graph LR
-    WC[Wireguard Client] -->|UDP| B[Zia Client]
-    B -->|Websocket| C[Http Proxy]
-    C -->|Websocket| D[Zia Server]
-    D -->|UDP| E[Wireguard Server]
+    WC[Wireguard Client] ---|UDP| B[Zia Client]
+    B ---|Websocket| C[Http Proxy]
+    C ---|Websocket| D[Zia Server]
+    D ---|UDP| E[Wireguard Server]
 ```
 
 ## Client
