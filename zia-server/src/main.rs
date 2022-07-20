@@ -46,7 +46,7 @@ async fn shutdown_signal() -> anyhow::Result<()> {
         .await;
     };
 
-    tokio::select! {
+    select! {
       _ = ctrl_c => {},
       _ = terminate => {},
     }

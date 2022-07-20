@@ -4,11 +4,11 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-tokio = { version = "1.19", features = ["macros", "rt-multi-thread", "net", "signal", "io-util", "full"] }
+tokio = { version = "1.19", default-features = false, features = ["macros", "rt-multi-thread", "net", "signal", "io-util"] }
 serde = { version = "1.0", default-features = false, features = ["derive"] }
 tracing-subscriber = { version = "0.3", features = ["tracing-log"] }
+tokio-tungstenite = { version = "0.17", default-features = false }
+futures-util = { version = "0.3", default-features = false }
 config = { version = "0.13", default-features = false }
-tokio-tungstenite = { version = "0.17" }
-futures-util = "0.3"
 tracing = "0.1"
 anyhow = "1.0"

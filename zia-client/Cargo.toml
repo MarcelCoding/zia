@@ -5,11 +5,11 @@ edition = "2021"
 
 [dependencies]
 tokio = { version = "1.20", default-features = false, features = ["macros", "rt-multi-thread", "net", "signal", "io-util", "sync"] }
-futures-util = { version = "0.3", default-features = false, features = ["sink"] }
-tokio-tungstenite = { version = "0.17", features = ["rustls-tls-webpki-roots"] }
+tokio-tungstenite = { version = "0.17", default-features = false, features = ["connect", "rustls-tls-webpki-roots"] }
 serde = { version = "1.0", default-features = false, features = ["derive"] }
 tracing-subscriber = { version = "0.3", features = ["tracing-log"] }
 async-http-proxy = { version = "1.2", features = ["runtime-tokio"] }
+futures-util = { version = "0.3", default-features = false }
 config = { version = "0.13", default-features = false }
 url = { version = "2.2", features = ["serde"] }
 async-trait = "0.1"
