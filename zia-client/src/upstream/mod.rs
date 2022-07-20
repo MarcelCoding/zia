@@ -1,17 +1,18 @@
+use anyhow::anyhow;
 use tokio::net::UdpSocket;
+use url::Url;
 
-pub(crate) use self::ws::*;
-
+mod tcp;
 mod ws;
 
-#[async_trait::async_trait]
-pub(crate) trait Upstream {
-  type Conn: Connection;
-
-  async fn connect(&self) -> anyhow::Result<Self::Conn>;
-}
-
-#[async_trait::async_trait]
-pub(crate) trait Connection {
-  async fn mount(mut self, inbound: UdpSocket) -> anyhow::Result<()>;
+pub(crate) async fn transmit(
+  socket: UdpSocket,
+  upstream: &Url,
+  proxy: &Option<Url>,
+) -> anyhow::Result<()> {
+  match upstream.scheme() {
+    "tcp" | "tcps" => tcp::transmit(socket, upstream, proxy).await,
+    "ws" | "wss" => ws::transmit(socket, upstream, proxy).await,
+    _ => Err(anyhow!("Unsupported upstream scheme {}", upstream.scheme())),
+  }
 }

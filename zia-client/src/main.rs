@@ -1,13 +1,18 @@
-extern crate core;
-
 use std::net::SocketAddr;
 
-use tokio::{select, signal};
+#[cfg(not(target_env = "msvc"))]
+use tikv_jemallocator::Jemalloc;
 use tokio::net::UdpSocket;
+use tokio::select;
+use tokio::signal::{ctrl_c, unix};
 use tracing::info;
+use url::Url;
 
 use crate::cfg::ClientCfg;
-use crate::upstream::{Connection, Upstream, WsUpstream};
+
+#[cfg(not(target_env = "msvc"))]
+#[global_allocator]
+static GLOBAL: Jemalloc = Jemalloc;
 
 mod cfg;
 mod upstream;
@@ -18,15 +23,8 @@ async fn main() -> anyhow::Result<()> {
 
   let config = ClientCfg::load()?;
 
-  info!("Using websocket upstream at {}", config.upstream);
-
-  let upstream = WsUpstream {
-    url: config.upstream,
-    proxy: config.proxy,
-  };
-
   select! {
-    result = listen(config.listen_addr, upstream) => {
+    result = listen(config.listen_addr, config.upstream, config. proxy) => {
       result?;
       info!("Socket closed, quitting...");
     },
@@ -40,16 +38,12 @@ async fn main() -> anyhow::Result<()> {
 }
 
 async fn shutdown_signal() -> anyhow::Result<()> {
-  let ctrl_c = async {
-    signal::ctrl_c()
-      .await
-      .expect("failed to install Ctrl+C handler")
-  };
+  let ctrl_c = async { ctrl_c().await.expect("failed to install Ctrl+C handler") };
 
   #[cfg(unix)]
   {
     let terminate = async {
-      signal::unix::signal(signal::unix::SignalKind::terminate())
+      unix::signal(unix::SignalKind::terminate())
         .expect("failed to install signal handler")
         .recv()
         .await;
@@ -70,13 +64,22 @@ async fn shutdown_signal() -> anyhow::Result<()> {
   }
 }
 
-async fn listen<U: Upstream>(addr: SocketAddr, upstream: U) -> anyhow::Result<()> {
-  let connection = upstream.connect().await?;
-
+async fn listen(addr: SocketAddr, upstream: Url, proxy: Option<Url>) -> anyhow::Result<()> {
   let inbound = UdpSocket::bind(addr).await?;
   info!("Listening on {}/udp", inbound.local_addr()?);
 
-  connection.mount(inbound).await?;
+  if let Some(proxy) = &proxy {
+    info!(
+      "Stating transmission via {} using proxy {}...",
+      upstream, proxy
+    );
+  } else {
+    info!("Stating transmission via {}...", upstream);
+  }
+
+  upstream::transmit(inbound, &upstream, &proxy).await?;
+
+  info!("Transmission via {} closed", upstream);
 
   Ok(())
 }

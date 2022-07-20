@@ -1,14 +1,18 @@
-use std::net::SocketAddr;
+#[cfg(not(target_env = "msvc"))]
+use tikv_jemallocator::Jemalloc;
 
-use futures_util::{SinkExt, StreamExt};
-use tokio::{select, signal, try_join};
-use tokio::net::{TcpListener, TcpStream, UdpSocket};
-use tokio_tungstenite::tungstenite::Message;
-use tracing::{error, info};
+#[cfg(not(target_env = "msvc"))]
+#[global_allocator]
+static GLOBAL: Jemalloc = Jemalloc;
 
-use crate::cfg::ClientCfg;
+use tokio::{select, signal};
+use tracing::info;
+
+use crate::cfg::{ClientCfg, Mode};
+use crate::listener::{Listener, TcpListener, WsListener};
 
 mod cfg;
+mod listener;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -16,14 +20,25 @@ async fn main() -> anyhow::Result<()> {
 
   let config = ClientCfg::load()?;
 
+  let listener: Box<dyn Listener> = match config.mode {
+    Mode::Ws => Box::new(WsListener {
+      addr: config.listen_addr,
+    }),
+    Mode::Tcp => Box::new(TcpListener {
+      addr: config.listen_addr,
+    }),
+  };
+
+  info!("Listening in {}://{}...", config.mode, config.listen_addr);
+
   select! {
-    result = accept_connections(config.listen_addr, config.upstream) => {
+    result = listener.listen(config.upstream) => {
       result?;
       info!("Socket closed, quitting...");
     },
     result = shutdown_signal() => {
       result?;
-      info!("Termination signal received, quitting...")
+      info!("Termination signal received, quitting...");
     }
   }
 
@@ -59,67 +74,4 @@ async fn shutdown_signal() -> anyhow::Result<()> {
     ctrl_c.await;
     Ok(())
   }
-}
-
-async fn accept_connections(
-  listen_addr: SocketAddr,
-  upstream: SocketAddr,
-) -> anyhow::Result<()> {
-  let listener = TcpListener::bind(listen_addr).await?;
-  info!("Listening on ws://{}...", listener.local_addr()?);
-
-  loop {
-    let (sock, _) = listener.accept().await?;
-
-    tokio::spawn(async move {
-      if let Err(err) = handle(sock, upstream).await {
-        error!("Error while handling connection: {:?}", err);
-      }
-    });
-  }
-}
-
-async fn handle(raw_downstream: TcpStream, upstream_addr: SocketAddr) -> anyhow::Result<()> {
-  let downstream_addr = raw_downstream.peer_addr()?;
-  info!("New downstream connection: {}", downstream_addr);
-  let downstream = tokio_tungstenite::accept_async(raw_downstream).await?;
-
-  let (mut wi, mut ri) = downstream.split();
-
-  let upstream = UdpSocket::bind("0.0.0.0:0").await?; // TODO: maybe make this configurable
-
-  upstream.connect(upstream_addr).await?;
-
-  info!(
-    "Connected to udp upstream (local: {}/udp, peer: {}/udp) for downstream {}",
-    upstream.local_addr()?,
-    upstream.peer_addr()?,
-    downstream_addr
-  );
-
-  let server_to_client = async {
-    let mut buf = [0; 65507];
-
-    let mut read = upstream.recv(&mut buf[..]).await?;
-    while read > 0 {
-      wi.send(Message::binary(&buf[0..read])).await?;
-      read = upstream.recv(&mut buf[..]).await?;
-    }
-
-    wi.close().await?;
-    Ok::<_, anyhow::Error>(())
-  };
-
-  let client_to_server = async {
-    while let Some(next) = ri.next().await {
-      let x = &next?.into_data();
-      upstream.send(x).await?;
-    }
-
-    Ok::<_, anyhow::Error>(())
-  };
-
-  try_join!(client_to_server, server_to_client)?;
-
-  Ok(())
 }
