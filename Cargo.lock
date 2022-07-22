@@ -984,6 +984,7 @@ dependencies = [
  "once_cell",
  "tokio",
  "tokio-rustls",
+ "tokio-tungstenite",
  "tracing",
  "url",
  "webpki-roots",
