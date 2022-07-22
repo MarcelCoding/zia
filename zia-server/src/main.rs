@@ -1,15 +1,15 @@
 #[cfg(not(target_env = "msvc"))]
 use tikv_jemallocator::Jemalloc;
-
-#[cfg(not(target_env = "msvc"))]
-#[global_allocator]
-static GLOBAL: Jemalloc = Jemalloc;
-
+use tokio::signal::ctrl_c;
 use tokio::{select, signal};
 use tracing::info;
 
 use crate::cfg::{ClientCfg, Mode};
 use crate::listener::{Listener, TcpListener, WsListener};
+
+#[cfg(not(target_env = "msvc"))]
+#[global_allocator]
+static GLOBAL: Jemalloc = Jemalloc;
 
 mod cfg;
 mod listener;
@@ -46,11 +46,7 @@ async fn main() -> anyhow::Result<()> {
 }
 
 async fn shutdown_signal() -> anyhow::Result<()> {
-  let ctrl_c = async {
-    signal::ctrl_c()
-      .await
-      .expect("failed to install Ctrl+C handler")
-  };
+  let ctrl_c = async { ctrl_c().await.expect("failed to install Ctrl+C handler") };
 
   #[cfg(unix)]
   {
