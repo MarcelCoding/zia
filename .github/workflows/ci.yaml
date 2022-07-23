@@ -146,13 +146,13 @@ jobs:
         run: |
           mkdir -p ctx/linux/amd64 ctx/linux/arm64 ctx/linux/arm/v7
 
-          mv zia-server_x86_64-unknown-linux-gnu/zia-server_x86_64-unknown-linux-gnu ctx/linux/amd64/zia-server
-          mv zia-server_aarch64-unknown-linux-gnu/zia-server_aarch64-unknown-linux-gnu ctx/linux/arm64/zia-server
-          mv zia-server_armv7-unknown-linux-gnueabihf/zia-server_armv7-unknown-linux-gnueabihf ctx/linux/arm/v7/zia-server
+          mv zia-${{ matrix.component }}_x86_64-unknown-linux-gnu/zia-${{ matrix.component }}_x86_64-unknown-linux-gnu ctx/linux/amd64/zia-${{ matrix.component }}
+          mv zia-${{ matrix.component }}_aarch64-unknown-linux-gnu/zia-${{ matrix.component }}_aarch64-unknown-linux-gnu ctx/linux/arm64/zia-${{ matrix.component }}
+          mv zia-${{ matrix.component }}_armv7-unknown-linux-gnueabihf/zia-${{ matrix.component }}_armv7-unknown-linux-gnueabihf ctx/linux/arm/v7/zia-${{ matrix.component }}
 
-          mv zia-client_x86_64-unknown-linux-gnu/zia-client_x86_64-unknown-linux-gnu ctx/linux/amd64/zia-client
-          mv zia-client_aarch64-unknown-linux-gnu/zia-client_aarch64-unknown-linux-gnu ctx/linux/arm64/zia-client
-          mv zia-client_armv7-unknown-linux-gnueabihf/zia-client_armv7-unknown-linux-gnueabihf ctx/linux/arm/v7/zia-client
+          chmod +x ctx/linux/amd64/zia-${{ matrix.component }}
+          chmod +x ctx/linux/arm64/zia-${{ matrix.component }}
+          chmod +x ctx/linux/arm/v7/zia-${{ matrix.component }}
           
           tree ctx
 
