@@ -1,7 +1,6 @@
 // see: https://github.com/mullvad/udp-over-tcp/blob/main/src/forward_traffic.rs
 
 use std::convert::{Infallible, TryFrom};
-use std::future::Future;
 use std::mem;
 use std::sync::Arc;
 use std::time::Duration;
@@ -11,10 +10,9 @@ use futures_util::future::select;
 use futures_util::pin_mut;
 use tokio::io::{split, AsyncReadExt, AsyncWriteExt, ReadHalf, WriteHalf};
 use tokio::net::{TcpStream, UdpSocket};
-use tokio::time::timeout;
 use tracing::error;
 
-use crate::Stream;
+use crate::{maybe_timeout, Stream};
 
 /// A UDP datagram header has a 16 bit field containing an unsigned integer
 /// describing the length of the datagram (including the header itself).
@@ -22,7 +20,7 @@ use crate::Stream;
 /// UDP header, this constant is 8 bytes more than any UDP socket
 /// read operation would ever return. We are going to use that extra space
 /// to store our 2 byte udp-over-tcp header.
-pub const MAX_DATAGRAM_SIZE: usize = u16::MAX as usize;
+const MAX_DATAGRAM_SIZE: usize = u16::MAX as usize;
 const HEADER_LEN: usize = mem::size_of::<u16>();
 
 /// Forward traffic between the given UDP and TCP sockets in both directions.
@@ -91,16 +89,6 @@ async fn process_tcp2udp(
   Ok(())
 }
 
-async fn maybe_timeout<F: Future>(
-  duration: Option<Duration>,
-  future: F,
-) -> Result<F::Output, tokio::time::error::Elapsed> {
-  match duration {
-    Some(duration) => timeout(duration, future).await,
-    None => Ok(future.await),
-  }
-}
-
 /// Forward all complete datagrams in `buffer` to `udp_out`.
 /// Returns the number of processed bytes.
 async fn forward_datagrams_in_buffer(udp_out: &UdpSocket, buffer: &[u8]) -> anyhow::Result<usize> {
@@ -164,6 +152,6 @@ async fn process_udp2tcp(
 /// This is put on the heap and in a separate function to avoid the 64k buffer from ending
 /// up on the stack and blowing up the size of the futures using it.
 #[inline(never)]
-pub fn datagram_buffer() -> Box<[u8; MAX_DATAGRAM_SIZE]> {
+fn datagram_buffer() -> Box<[u8; MAX_DATAGRAM_SIZE]> {
   Box::new([0u8; MAX_DATAGRAM_SIZE])
 }

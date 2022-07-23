@@ -30,6 +30,7 @@ static TLS_CONNECTOR: Lazy<TlsConnector> = Lazy::new(|| {
 pub enum Stream<IO> {
   Plain(IO),
   Tls(TlsStream<IO>),
+  TlsOverTls(TlsStream<TlsStream<IO>>),
 }
 
 impl Stream<TcpStream> {
@@ -89,13 +90,16 @@ impl Stream<TcpStream> {
 
     Ok(stream)
   }
+}
 
+impl<IO: AsyncRead + AsyncWrite + Unpin> Stream<IO> {
   pub async fn upgrade_to_tls(self, host: &str) -> anyhow::Result<Self> {
     let domain = ServerName::try_from(host)?;
 
     let stream = match self {
       Self::Plain(stream) => Self::Tls(TLS_CONNECTOR.connect(domain, stream).await?),
-      Self::Tls(_) => unimplemented!(), //Self::Tls(TLS_CONNECTOR.connect(domain, stream).await?),
+      Self::Tls(stream) => Self::TlsOverTls(TLS_CONNECTOR.connect(domain, stream).await?),
+      Self::TlsOverTls(_) => unimplemented!(),
     };
 
     Ok(stream)
@@ -111,6 +115,7 @@ impl<IO: AsyncRead + AsyncWrite + Unpin> AsyncRead for Stream<IO> {
     match &mut *self {
       Self::Plain(stream) => Pin::new(stream).poll_read(cx, buf),
       Self::Tls(stream) => Pin::new(stream).poll_read(cx, buf),
+      Self::TlsOverTls(stream) => Pin::new(stream).poll_read(cx, buf),
     }
   }
 }
@@ -124,6 +129,7 @@ impl<IO: AsyncRead + AsyncWrite + Unpin> AsyncWrite for Stream<IO> {
     match &mut *self {
       Self::Plain(stream) => Pin::new(stream).poll_write(cx, buf),
       Self::Tls(stream) => Pin::new(stream).poll_write(cx, buf),
+      Self::TlsOverTls(stream) => Pin::new(stream).poll_write(cx, buf),
     }
   }
 
@@ -131,6 +137,7 @@ impl<IO: AsyncRead + AsyncWrite + Unpin> AsyncWrite for Stream<IO> {
     match &mut *self {
       Self::Plain(stream) => Pin::new(stream).poll_flush(cx),
       Self::Tls(stream) => Pin::new(stream).poll_flush(cx),
+      Self::TlsOverTls(stream) => Pin::new(stream).poll_flush(cx),
     }
   }
 
@@ -138,6 +145,7 @@ impl<IO: AsyncRead + AsyncWrite + Unpin> AsyncWrite for Stream<IO> {
     match &mut *self {
       Self::Plain(stream) => Pin::new(stream).poll_shutdown(cx),
       Self::Tls(stream) => Pin::new(stream).poll_shutdown(cx),
+      Self::TlsOverTls(stream) => Pin::new(stream).poll_shutdown(cx),
     }
   }
 
@@ -149,6 +157,7 @@ impl<IO: AsyncRead + AsyncWrite + Unpin> AsyncWrite for Stream<IO> {
     match &mut *self {
       Self::Plain(stream) => Pin::new(stream).poll_write_vectored(cx, bufs),
       Self::Tls(stream) => Pin::new(stream).poll_write_vectored(cx, bufs),
+      Self::TlsOverTls(stream) => Pin::new(stream).poll_write_vectored(cx, bufs),
     }
   }
 
@@ -156,6 +165,7 @@ impl<IO: AsyncRead + AsyncWrite + Unpin> AsyncWrite for Stream<IO> {
     match self {
       Self::Plain(stream) => stream.is_write_vectored(),
       Self::Tls(stream) => stream.is_write_vectored(),
+      Self::TlsOverTls(stream) => stream.is_write_vectored(),
     }
   }
 }

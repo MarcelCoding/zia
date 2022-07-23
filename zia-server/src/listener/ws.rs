@@ -1,10 +1,10 @@
 use std::net::SocketAddr;
+use std::time::Duration;
 
-use futures_util::{SinkExt, StreamExt};
 use tokio::net::{TcpListener, TcpStream, UdpSocket};
-use tokio::try_join;
-use tokio_tungstenite::tungstenite::Message;
 use tracing::{error, info};
+use zia_common::process_udp_over_ws;
+use zia_common::Stream::Plain;
 
 use crate::listener::Listener;
 
@@ -31,13 +31,11 @@ impl Listener for WsListener {
 }
 
 impl WsListener {
-  async fn handle(raw_downstream: TcpStream, upstream_addr: SocketAddr) -> anyhow::Result<()> {
-    let downstream_addr = raw_downstream.peer_addr()?;
-    raw_downstream.set_nodelay(true)?;
+  async fn handle(downstream: TcpStream, upstream_addr: SocketAddr) -> anyhow::Result<()> {
+    downstream.set_nodelay(true)?;
+    let downstream_addr = downstream.peer_addr()?;
     info!("New downstream connection: {}", downstream_addr);
-    let downstream = tokio_tungstenite::accept_async(raw_downstream).await?;
-
-    let (mut wi, mut ri) = downstream.split();
+    let downstream = tokio_tungstenite::accept_async(Plain(downstream)).await?;
 
     let upstream = UdpSocket::bind("0.0.0.0:0").await?; // TODO: maybe make this configurable
 
@@ -50,29 +48,9 @@ impl WsListener {
       downstream_addr
     );
 
-    let server_to_client = async {
-      let mut buf = [0; 65507];
+    process_udp_over_ws(upstream, downstream, Some(Duration::from_secs(60))).await;
 
-      let mut read = upstream.recv(&mut buf).await?;
-      while read != 0 {
-        wi.send(Message::binary(&buf[..read])).await?;
-        read = upstream.recv(&mut buf).await?;
-      }
-
-      wi.close().await?;
-      Ok::<_, anyhow::Error>(())
-    };
-
-    let client_to_server = async {
-      while let Some(next) = ri.next().await {
-        let x = &next?.into_data();
-        upstream.send(x).await?;
-      }
-
-      Ok::<_, anyhow::Error>(())
-    };
-
-    try_join!(client_to_server, server_to_client)?;
+    info!("Connection with downstream {} closed...", downstream_addr);
 
     Ok(())
   }

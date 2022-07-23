@@ -1,0 +1,27 @@
+FROM debian:bullseye-slim AS builder
+ENV USER=zia
+ENV UID=10001
+
+RUN adduser \
+    --disabled-password \
+    --gecos "" \
+    --home "/nonexistent" \
+    --shell "/sbin/nologin" \
+    --no-create-home \
+    --uid "${UID}" \
+    "${USER}"
+
+FROM gcr.io/distroless/cc
+ARG TARGETPLATFORM
+ARG COMPONENT
+
+COPY --from=builder /etc/passwd /etc/passwd
+COPY --from=builder /etc/group /etc/group
+
+WORKDIR /zia
+
+COPY ./${TARGETPLATFORM}/zia-${COMPONENT} ./zia
+
+USER zia:zia
+
+ENTRYPOINT ["/zia/zia"]
