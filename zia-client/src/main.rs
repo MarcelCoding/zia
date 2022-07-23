@@ -3,8 +3,8 @@ use std::net::SocketAddr;
 #[cfg(not(target_env = "msvc"))]
 use tikv_jemallocator::Jemalloc;
 use tokio::net::UdpSocket;
+use tokio::select;
 use tokio::signal::ctrl_c;
-use tokio::{select, signal};
 use tracing::info;
 use url::Url;
 
@@ -43,7 +43,7 @@ async fn shutdown_signal() -> anyhow::Result<()> {
   #[cfg(unix)]
   {
     let terminate = async {
-      signal::unix::signal(signal::unix::SignalKind::terminate())
+      tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
         .expect("failed to install signal handler")
         .recv()
         .await;
