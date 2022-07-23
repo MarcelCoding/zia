@@ -4,14 +4,17 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-tokio = { version = "1.20", default-features = false, features = ["macros", "rt-multi-thread", "net", "signal", "io-util", "sync"] }
-tokio-tungstenite = { version = "0.17", default-features = false, features = ["connect", "rustls-tls-webpki-roots"] }
+tokio = { version = "1.20", default-features = false, features = ["macros", "net", "rt-multi-thread", "signal", "sync"] }
 serde = { version = "1.0", default-features = false, features = ["derive"] }
 tracing-subscriber = { version = "0.3", features = ["tracing-log"] }
-async-http-proxy = { version = "1.2", features = ["runtime-tokio"] }
+tokio-tungstenite = { version = "0.17", default-features = false }
 futures-util = { version = "0.3", default-features = false }
 config = { version = "0.13", default-features = false }
 url = { version = "2.2", features = ["serde"] }
-async-trait = "0.1"
 tracing = "0.1"
 anyhow = "1.0"
+
+zia-common = { path = "../zia-common" }
+
+[target.'cfg(not(target_env = "msvc"))'.dependencies]
+tikv-jemallocator = "0.5"

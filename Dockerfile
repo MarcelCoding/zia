@@ -1,4 +1,5 @@
-FROM rust:slim AS chef
+# why not slim: tikv_jemallocator needs make, make is not in slim
+FROM rust:latest AS chef
 
 RUN update-ca-certificates
 

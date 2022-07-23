@@ -8,7 +8,7 @@ use url::Url;
 pub(crate) struct ClientCfg {
   pub(crate) listen_addr: SocketAddr,
   pub(crate) upstream: Url,
-  pub(crate) proxy: Option<SocketAddr>,
+  pub(crate) proxy: Option<Url>,
 }
 
 impl ClientCfg {
