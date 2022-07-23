@@ -12,105 +12,12 @@ concurrency:
 
 jobs:
   build:
-    runs-on: ${{ format('{0}-latest', matrix.os) }}
-
-    strategy:
-      matrix:
-        os: [ ubuntu ]
-        component: [ client, server ]
-
-    steps:
-      - uses: actions/checkout@v3
-
-      - uses: actions/cache@v3
-        with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ runner.os }}-cargo-${{ matrix.component }}-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-${{ matrix.component }}-
-
-      - uses: dtolnay/rust-toolchain@stable
-
-      - name: Build
-        run: cargo build --release --package zia-${{ matrix.component }}
-
-      - name: Rename binary
-        run: mv target/release/zia-${{ matrix.component }} zia-${{ matrix.component }}_${{ matrix.os }}_x86_64
-
-      - uses: actions/upload-artifact@v3
-        with:
-          name: zia-${{ matrix.component }}_${{ matrix.os }}_x86_64
-          path: zia-${{ matrix.component }}_${{ matrix.os }}_x86_64*
-
-      - uses: alexellis/upload-assets@0.3.0
-        if: startsWith(github.ref, 'refs/tags/')
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        with:
-          asset_paths: '["zia-${{ matrix.component }}_${{ matrix.os }}_x86_64*"]'
-
-  build-native:
-    needs: [ build ]
-    runs-on: ${{ format('{0}-latest', matrix.os) }}
-
-    strategy:
-      matrix:
-        os: [ windows, macos ]
-        component: [ client, server ]
-
-    steps:
-      - uses: actions/checkout@v3
-
-      - uses: actions/cache@v3
-        with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ runner.os }}-cargo-${{ matrix.component }}-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-${{ matrix.component }}-
-
-      - uses: dtolnay/rust-toolchain@stable
-
-      - name: Build
-        run: cargo build --release --package zia-${{ matrix.component }}
-
-      - name: Rename binary
-        if: matrix.os != 'windows'
-        run: mv target/release/zia-${{ matrix.component }} zia-${{ matrix.component }}_${{ matrix.os }}_x86_64
-
-      - name: Rename binary (win)
-        if: matrix.os == 'windows'
-        run: mv target/release/zia-${{ matrix.component }}.exe zia-${{ matrix.component }}_${{ matrix.os }}_x86_64.exe
-
-      - uses: actions/upload-artifact@v3
-        with:
-          name: zia-${{ matrix.component }}_${{ matrix.os }}_x86_64
-          path: zia-${{ matrix.component }}_${{ matrix.os }}_x86_64*
-
-      - uses: alexellis/upload-assets@0.3.0
-        if: startsWith(github.ref, 'refs/tags/')
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        with:
-          asset_paths: '["zia-${{ matrix.component }}_${{ matrix.os }}_x86_64*"]'
-
-  build-cross:
-    needs: [ build ]
     runs-on: ubuntu-latest
 
     strategy:
       matrix:
-        component: [ client, server ]
         target:
+          - x86_64-unknown-linux-gnu
           - aarch64-unknown-linux-gnu
           - armv7-unknown-linux-gnueabihf
 
@@ -125,38 +32,101 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: ${{ runner.os }}-cargo-${{ matrix.target }}-${{ matrix.component }}-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-${{ matrix.target }}-${{ matrix.component }}-
+            ${{ runner.os }}-cargo-${{ matrix.target }}-
 
       - uses: dtolnay/rust-toolchain@stable
 
-      - run: cargo install --force cross
+      - run: cargo install --force cross --git https://github.com/cross-rs/cross
 
       - name: Build
-        run: cross build --release --target ${{ matrix.target }}  --package zia-${{ matrix.component }}
+        run: cross build --release --target ${{ matrix.target }}
 
       - name: Rename binary
-        if: matrix.os != 'windows'
-        run: mv target/${{ matrix.target }}/release/zia-${{ matrix.component }} zia-${{ matrix.component }}_${{ matrix.target }}
+        run: |
+          mv target/${{ matrix.target }}/release/zia-client zia-client_${{ matrix.target }}
+          mv target/${{ matrix.target }}/release/zia-server zia-server_${{ matrix.target }}
 
-      - name: Rename binary (win)
-        if: matrix.os == 'windows'
-        run: mv target/release/zia-${{ matrix.component }}.exe zia-${{ matrix.component }}_${{ matrix.target }}.exe
-
-      - uses: actions/upload-artifact@v3
+      - name: Upload Artifact (client)
+        uses: actions/upload-artifact@v3
         with:
-          name: zia-${{ matrix.component }}_${{ matrix.target }}
-          path: zia-${{ matrix.component }}_${{ matrix.target }}*
+          name: zia-client_${{ matrix.target }}
+          path: zia-client_${{ matrix.target }}*
+
+      - name: Upload Artifact (server)
+        uses: actions/upload-artifact@v3
+        with:
+          name: zia-server_${{ matrix.target }}
+          path: zia-server_${{ matrix.target }}*
 
       - uses: alexellis/upload-assets@0.3.0
         if: startsWith(github.ref, 'refs/tags/')
         env:
           GITHUB_TOKEN: ${{ github.token }}
         with:
-          asset_paths: '["zia-${{ matrix.component }}_${{ matrix.target }}"]'
+          asset_paths: '["zia-client_${{ matrix.target }}","zia-server_${{ matrix.target }}"]'
 
-  docker:
+  build-native:
+    needs: [ build ]
+    runs-on: ${{ format('{0}-latest', matrix.os) }}
+
+    strategy:
+      matrix:
+        os: [ windows, macos ]
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Build
+        run: cargo build --release
+
+      - name: Rename binary
+        if: matrix.os != 'windows'
+        run: |
+          mv target/release/zia-client zia-client_${{ matrix.os }}_x86_64
+          mv target/release/zia-server zia-server_${{ matrix.os }}_x86_64
+
+      - name: Rename binary (win)
+        if: matrix.os == 'windows'
+        run: |
+          mv target/release/zia-client.exe zia-client_${{ matrix.os }}_x86_64.exe
+          mv target/release/zia-server.exe zia-server_${{ matrix.os }}_x86_64.exe
+
+      - name: Upload Artifact (client)
+        uses: actions/upload-artifact@v3
+        with:
+          name: zia-client_${{ matrix.os }}_x86_64
+          path: zia-client_${{ matrix.os }}_x86_64*
+
+      - name: Upload Artifact (server)
+        uses: actions/upload-artifact@v3
+        with:
+          name: zia-server_${{ matrix.os }}_x86_64
+          path: zia-server_${{ matrix.os }}_x86_64*
+
+      - uses: alexellis/upload-assets@0.3.0
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        with:
+          asset_paths: '["zia-client_${{ matrix.os }}_x86_64*","zia-server_${{ matrix.os }}_x86_64*"]'
+
+  build-docker:
     needs: [ build ]
     runs-on: ubuntu-latest
 
@@ -169,6 +139,22 @@ jobs:
 
     steps:
       - uses: actions/checkout@v3
+
+      - uses: actions/download-artifact@v3
+
+      - name: Organize binaries
+        run: |
+          mkdir -p ctx/linux/amd64 ctx/linux/arm64 ctx/linux/arm/v7
+
+          mv zia-server_x86_64-unknown-linux-gnu/zia-server_x86_64-unknown-linux-gnu ctx/linux/amd64/zia-server
+          mv zia-server_aarch64-unknown-linux-gnu/zia-server_aarch64-unknown-linux-gnu ctx/linux/arm64/zia-server
+          mv zia-server_armv7-unknown-linux-gnueabihf/zia-server_armv7-unknown-linux-gnueabihf ctx/linux/arm/v7/zia-server
+
+          mv zia-client_x86_64-unknown-linux-gnu/zia-client_x86_64-unknown-linux-gnu ctx/linux/amd64/zia-client
+          mv zia-client_aarch64-unknown-linux-gnu/zia-client_aarch64-unknown-linux-gnu ctx/linux/arm64/zia-client
+          mv zia-client_armv7-unknown-linux-gnueabihf/zia-client_armv7-unknown-linux-gnueabihf ctx/linux/arm/v7/zia-client
+          
+          tree ctx
 
       - name: Docker meta
         id: meta
@@ -205,7 +191,9 @@ jobs:
       - name: Build
         uses: docker/build-push-action@v3
         with:
-          platforms: linux/amd64,linux/arm64/v8 #,linux/arm/v7
+          file: Dockerfile.gh-actions
+          context: ctx
+          platforms: linux/amd64,linux/arm64,linux/arm/v7
           build-args: COMPONENT=${{ matrix.component }}
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
