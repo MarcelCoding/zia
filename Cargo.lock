@@ -959,7 +959,7 @@ checksum = "c811ca4a8c853ef420abd8592ba53ddbbac90410fab6903b3e79972a631f7680"
 
 [[package]]
 name = "zia-client"
-version = "0.1.0"
+version = "0.0.0-git"
 dependencies = [
  "anyhow",
  "config",
@@ -976,7 +976,7 @@ dependencies = [
 
 [[package]]
 name = "zia-common"
-version = "0.1.0"
+version = "0.0.0-git"
 dependencies = [
  "anyhow",
  "async-http-proxy",
@@ -992,7 +992,7 @@ dependencies = [
 
 [[package]]
 name = "zia-server"
-version = "0.1.0"
+version = "0.0.0-git"
 dependencies = [
  "anyhow",
  "async-trait",
