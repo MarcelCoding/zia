@@ -36,7 +36,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-${{ matrix.target }}-
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@nightly
 
       - run: cargo install --force cross --git https://github.com/cross-rs/cross
 
@@ -107,7 +107,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@nightly
 
       - name: Find Version
         if: startsWith(github.ref, 'refs/tags/')
