@@ -1,3 +1,4 @@
+#![feature(entry_insert)]
 use std::net::SocketAddr;
 
 #[cfg(not(target_env = "msvc"))]
@@ -15,6 +16,7 @@ use crate::cfg::ClientCfg;
 static GLOBAL: Jemalloc = Jemalloc;
 
 mod cfg;
+mod handler;
 mod upstream;
 
 #[tokio::main]
@@ -24,8 +26,8 @@ async fn main() -> anyhow::Result<()> {
   let config = ClientCfg::load()?;
 
   select! {
-    result = listen(config.listen_addr, config.upstream, config. proxy) => {
-      result?;
+    result = tokio::spawn(listen(config.listen_addr, config.upstream, config.proxy)) => {
+      result??;
       info!("Socket closed, quitting...");
     },
     result = shutdown_signal() => {
@@ -69,12 +71,9 @@ async fn listen(addr: SocketAddr, upstream: Url, proxy: Option<Url>) -> anyhow::
   info!("Listening on {}/udp", inbound.local_addr()?);
 
   if let Some(proxy) = &proxy {
-    info!(
-      "Stating transmission via {} using proxy {}...",
-      upstream, proxy
-    );
+    info!("Using upstream at {} via proxy {}...", upstream, proxy);
   } else {
-    info!("Stating transmission via {}...", upstream);
+    info!("Using upstream at {}...", upstream);
   }
 
   upstream::transmit(inbound, &upstream, &proxy).await?;

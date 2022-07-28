@@ -6,6 +6,7 @@ use std::task::{Context, Poll};
 use anyhow::anyhow;
 use async_http_proxy::{http_connect_tokio, http_connect_tokio_with_basic_auth};
 use once_cell::sync::Lazy;
+use pin_project::pin_project;
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 use tokio::net::TcpStream;
 use tokio_rustls::client::TlsStream;
@@ -27,10 +28,11 @@ static TLS_CONNECTOR: Lazy<TlsConnector> = Lazy::new(|| {
   TlsConnector::from(Arc::new(config))
 });
 
+#[pin_project(project = EnumProj)]
 pub enum Stream<IO> {
-  Plain(IO),
-  Tls(TlsStream<IO>),
-  TlsOverTls(TlsStream<TlsStream<IO>>),
+  Plain(#[pin] IO),
+  Tls(#[pin] TlsStream<IO>),
+  TlsOverTls(#[pin] TlsStream<TlsStream<IO>>),
 }
 
 impl Stream<TcpStream> {
@@ -108,56 +110,56 @@ impl<IO: AsyncRead + AsyncWrite + Unpin> Stream<IO> {
 
 impl<IO: AsyncRead + AsyncWrite + Unpin> AsyncRead for Stream<IO> {
   fn poll_read(
-    mut self: Pin<&mut Self>,
+    self: Pin<&mut Self>,
     cx: &mut Context<'_>,
     buf: &mut ReadBuf<'_>,
   ) -> Poll<std::io::Result<()>> {
-    match &mut *self {
-      Self::Plain(stream) => Pin::new(stream).poll_read(cx, buf),
-      Self::Tls(stream) => Pin::new(stream).poll_read(cx, buf),
-      Self::TlsOverTls(stream) => Pin::new(stream).poll_read(cx, buf),
+    match self.project() {
+      EnumProj::Plain(stream) => stream.poll_read(cx, buf),
+      EnumProj::Tls(stream) => stream.poll_read(cx, buf),
+      EnumProj::TlsOverTls(stream) => stream.poll_read(cx, buf),
     }
   }
 }
 
 impl<IO: AsyncRead + AsyncWrite + Unpin> AsyncWrite for Stream<IO> {
   fn poll_write(
-    mut self: Pin<&mut Self>,
+    self: Pin<&mut Self>,
     cx: &mut Context<'_>,
     buf: &[u8],
   ) -> Poll<Result<usize, Error>> {
-    match &mut *self {
-      Self::Plain(stream) => Pin::new(stream).poll_write(cx, buf),
-      Self::Tls(stream) => Pin::new(stream).poll_write(cx, buf),
-      Self::TlsOverTls(stream) => Pin::new(stream).poll_write(cx, buf),
+    match self.project() {
+      EnumProj::Plain(stream) => stream.poll_write(cx, buf),
+      EnumProj::Tls(stream) => stream.poll_write(cx, buf),
+      EnumProj::TlsOverTls(stream) => stream.poll_write(cx, buf),
     }
   }
 
-  fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Error>> {
-    match &mut *self {
-      Self::Plain(stream) => Pin::new(stream).poll_flush(cx),
-      Self::Tls(stream) => Pin::new(stream).poll_flush(cx),
-      Self::TlsOverTls(stream) => Pin::new(stream).poll_flush(cx),
+  fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Error>> {
+    match self.project() {
+      EnumProj::Plain(stream) => stream.poll_flush(cx),
+      EnumProj::Tls(stream) => stream.poll_flush(cx),
+      EnumProj::TlsOverTls(stream) => stream.poll_flush(cx),
     }
   }
 
-  fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Error>> {
-    match &mut *self {
-      Self::Plain(stream) => Pin::new(stream).poll_shutdown(cx),
-      Self::Tls(stream) => Pin::new(stream).poll_shutdown(cx),
-      Self::TlsOverTls(stream) => Pin::new(stream).poll_shutdown(cx),
+  fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Error>> {
+    match self.project() {
+      EnumProj::Plain(stream) => stream.poll_shutdown(cx),
+      EnumProj::Tls(stream) => stream.poll_shutdown(cx),
+      EnumProj::TlsOverTls(stream) => stream.poll_shutdown(cx),
     }
   }
 
   fn poll_write_vectored(
-    mut self: Pin<&mut Self>,
+    self: Pin<&mut Self>,
     cx: &mut Context<'_>,
     bufs: &[IoSlice<'_>],
   ) -> Poll<Result<usize, Error>> {
-    match &mut *self {
-      Self::Plain(stream) => Pin::new(stream).poll_write_vectored(cx, bufs),
-      Self::Tls(stream) => Pin::new(stream).poll_write_vectored(cx, bufs),
-      Self::TlsOverTls(stream) => Pin::new(stream).poll_write_vectored(cx, bufs),
+    match self.project() {
+      EnumProj::Plain(stream) => stream.poll_write_vectored(cx, bufs),
+      EnumProj::Tls(stream) => stream.poll_write_vectored(cx, bufs),
+      EnumProj::TlsOverTls(stream) => stream.poll_write_vectored(cx, bufs),
     }
   }
 

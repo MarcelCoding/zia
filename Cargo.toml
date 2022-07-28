@@ -8,8 +8,9 @@ members = [
 [profile.release]
 lto = true
 codegen-units = 1
-panic = "abort"
-strip = true
+#panic = "abort"
+#strip = true
+debug=true
 
 # by overriding our dependencies' compilation settings, we can further optimize for size
 # https://docs.rust-embedded.org/book/unsorted/speed-vs-size.html#optimizing-dependencies

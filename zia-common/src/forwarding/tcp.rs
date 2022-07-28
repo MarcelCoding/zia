@@ -35,17 +35,17 @@ pub async fn process_udp_over_tcp(
   let udp_out = udp_in.clone();
   let (tcp_in, tcp_out) = split(tcp_stream);
 
-  let tcp2udp = async move {
+  let tcp2udp = tokio::spawn(async move {
     if let Err(error) = process_tcp2udp(tcp_in, udp_out, tcp_recv_timeout).await {
       error!("Error: {}", error);
     }
-  };
+  });
 
-  let udp2tcp = async move {
+  let udp2tcp = tokio::spawn(async move {
     if let Err(error) = process_udp2tcp(udp_in, tcp_out).await {
       error!("Error: {}", error);
     }
-  };
+  });
 
   pin_mut!(tcp2udp);
   pin_mut!(udp2tcp);
@@ -101,7 +101,7 @@ async fn forward_datagrams_in_buffer(udp_out: &UdpSocket, buffer: &[u8]) -> anyh
       // Buffer does not contain entire header for next datagram
       None => break Ok(header_start),
     };
-    let datagram_len = usize::from(u16::from_be_bytes(header));
+    let datagram_len = usize::from(u16::from_le_bytes(header));
     let datagram_start = header_end;
     let datagram_end = datagram_start + datagram_len;
 
@@ -137,7 +137,7 @@ async fn process_udp2tcp(
 
     // Set the "header" to the length of the datagram.
     let datagram_len = u16::try_from(udp_read_len).expect("UDP datagram can't be larger than 2^16");
-    buffer[..HEADER_LEN].copy_from_slice(&datagram_len.to_be_bytes()[..]);
+    buffer[..HEADER_LEN].copy_from_slice(&datagram_len.to_le_bytes()[..]);
 
     tcp_out
       .write_all(&buffer[..HEADER_LEN + udp_read_len])
