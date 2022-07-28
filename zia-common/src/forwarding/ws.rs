@@ -11,6 +11,8 @@ use futures_util::pin_mut;
 use futures_util::stream::{SplitSink, SplitStream};
 use futures_util::{SinkExt, StreamExt};
 use tokio::net::{TcpStream, UdpSocket};
+use tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode::Normal;
+use tokio_tungstenite::tungstenite::protocol::CloseFrame;
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::WebSocketStream;
 use tracing::error;
@@ -32,33 +34,48 @@ pub async fn process_udp_over_ws(
   ws_stream: WebSocketStream<Stream<TcpStream>>,
   ws_recv_timeout: Option<Duration>,
 ) {
-  let udp_in = Arc::new(udp_socket);
-  let udp_out = udp_in.clone();
-  let (ws_out, ws_in) = ws_stream.split();
+  let (mut ws_out, mut ws_in) = ws_stream.split();
 
-  let ws2udp = async move {
-    if let Err(error) = process_ws2udp(ws_in, udp_out, ws_recv_timeout).await {
-      error!("Error: {}", error);
-    }
-  };
+  {
+    let udp_in = Arc::new(udp_socket);
+    let udp_out = udp_in.clone();
 
-  let udp2ws = async move {
-    if let Err(error) = process_udp2ws(udp_in, ws_out).await {
-      error!("Error: {}", error);
-    }
-  };
+    let ws2udp = async {
+      if let Err(error) = process_ws2udp(&mut ws_in, udp_out, ws_recv_timeout).await {
+        error!("Error: {}", error);
+      }
+    };
 
-  pin_mut!(ws2udp);
-  pin_mut!(udp2ws);
+    let udp2ws = async {
+      if let Err(error) = process_udp2ws(udp_in, &mut ws_out).await {
+        error!("Error: {}", error);
+      }
+    };
 
-  // Wait until the UDP->WS or WS->UDP future terminates.
-  select(ws2udp, udp2ws).await;
+    pin_mut!(ws2udp);
+    pin_mut!(udp2ws);
+
+    // Wait until the UDP->WS or WS->UDP future terminates.
+    select(ws2udp, udp2ws).await;
+  }
+
+  if let Err(err) = ws_in
+    .reunite(ws_out)
+    .unwrap()
+    .close(Some(CloseFrame {
+      code: Normal,
+      reason: "Timeout".into(),
+    }))
+    .await
+  {
+    error!("Unable to close ws stream: {}", err);
+  }
 }
 
 /// Reads from `ws_in` and extracts UDP datagrams. Writes the datagrams to `udp_out`.
 /// Returns if the WS socket is closed, or an IO error happens on either socket.
 async fn process_ws2udp(
-  mut ws_in: SplitStream<WebSocketStream<Stream<TcpStream>>>,
+  ws_in: &mut SplitStream<WebSocketStream<Stream<TcpStream>>>,
   udp_out: Arc<UdpSocket>,
   ws_recv_timeout: Option<Duration>,
 ) -> anyhow::Result<()> {
@@ -95,7 +112,7 @@ async fn forward_datagrams_in_buffer(udp_out: &UdpSocket, buffer: &Vec<u8>) -> a
 /// to `ws_out` indefinitely, or until an IO error happens on either socket.
 async fn process_udp2ws(
   udp_in: Arc<UdpSocket>,
-  mut ws_out: SplitSink<WebSocketStream<Stream<TcpStream>>, Message>,
+  ws_out: &mut SplitSink<WebSocketStream<Stream<TcpStream>>, Message>,
 ) -> anyhow::Result<Infallible> {
   // A buffer large enough to hold any possible UDP datagram plus its 16 bit length header.
   let mut buffer = datagram_buffer();
