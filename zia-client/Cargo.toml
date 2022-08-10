@@ -2,6 +2,9 @@
 name = "zia-client"
 version = "0.0.0-git"
 edition = "2021"
+authors = ["Marcel <https://m4rc3l.de>"]
+license = "AGPL-3.0"
+description = "Proxy udp over websocket, useful to use Wireguard in restricted networks."
 
 [dependencies]
 tokio = { version = "1.20", default-features = false, features = ["macros", "net", "rt-multi-thread", "signal", "sync"] }
@@ -19,3 +22,9 @@ zia-common = { path = "../zia-common" }
 
 [target.'cfg(not(target_env = "msvc"))'.dependencies]
 tikv-jemallocator = "0.5"
+
+[package.metadata.generate-rpm]
+assets = [
+#    { source = "target/release/status-node", dest = "/usr/bin/status-node", mode = "0755" },
+    { source = "../LICENSE", dest = "/usr/share/doc/zia-client/LICENSE", doc = true, mode = "0644" },
+]

@@ -39,6 +39,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@nightly
 
       - run: cargo install --force cross --git https://github.com/cross-rs/cross
+      - run: cargo install --force cargo-deb
+#      - run: cargo install --force cargo-generate-rpm
 
       - name: Find Version
         if: startsWith(github.ref, 'refs/tags/')
@@ -60,6 +62,16 @@ jobs:
       - name: Build
         run: cross build --release --target ${{ matrix.target }}
 
+      - name: Build deb
+        run: |
+          cargo deb --no-build --no-strip --target ${{ matrix.target }} -p zia-client
+          cargo deb --no-build --no-strip --target ${{ matrix.target }} -p zia-server
+
+#      - name: Build rpm
+#        run: |
+#          cargo generate-rpm --target ${{ matrix.target }} -p zia-client
+#          cargo generate-rpm --target ${{ matrix.target }}  -p zia-server
+
       - name: Rename binary
         run: |
           mv target/${{ matrix.target }}/release/zia-client zia-client_${{ matrix.target }}
@@ -77,12 +89,24 @@ jobs:
           name: zia-server_${{ matrix.target }}
           path: zia-server_${{ matrix.target }}*
 
+      - name: Upload Artifact deb (client)
+        uses: actions/upload-artifact@v3
+        with:
+          name: zia-client_${{ matrix.target }}
+          path: target/${{ matrix.target }}/debian/zia-client_*.deb
+
+      - name: Upload Artifact deb (server)
+        uses: actions/upload-artifact@v3
+        with:
+          name: zia-server_${{ matrix.target }}
+          path: target/${{ matrix.target }}/debian/zia-server_*.deb
+
       - uses: alexellis/upload-assets@0.3.0
         if: startsWith(github.ref, 'refs/tags/')
         env:
           GITHUB_TOKEN: ${{ github.token }}
         with:
-          asset_paths: '["zia-client_${{ matrix.target }}","zia-server_${{ matrix.target }}"]'
+          asset_paths: '["zia-client_${{ matrix.target }}","zia-server_${{ matrix.target }}","target/${{ matrix.target }}/debian/zia-client_${{ steps.meta.outputs.version }}_*.deb","target/${{ matrix.target }}/debian/zia-server_${{ steps.meta.outputs.version }}_*.deb"]'
 
   build-native:
     needs: [ build ]
