@@ -144,11 +144,11 @@ jobs:
       - name: Set Cargo.toml version
         if: startsWith(github.ref, 'refs/tags/')
         run: |
-          sed -i'' "s/0\\.0\\.0-git/${{ steps.meta.outputs.version }}/" zia-client/Cargo.toml          
-          sed -i'' "s/0\\.0\\.0-git/${{ steps.meta.outputs.version }}/" zia-common/Cargo.toml
-          sed -i'' "s/0\\.0\\.0-git/${{ steps.meta.outputs.version }}/" zia-server/Cargo.toml
+          perl -pi -w -e "s/0\\.0\\.0-git/${{ steps.meta.outputs.version }}/g;" zia-client/Cargo.toml          
+          perl -pi -w -e "s/0\\.0\\.0-git/${{ steps.meta.outputs.version }}/g;" zia-common/Cargo.toml
+          perl -pi -w -e "s/0\\.0\\.0-git/${{ steps.meta.outputs.version }}/g;" zia-server/Cargo.toml
 
-          sed -i'' "s/0\\.0\\.0-git/${{ steps.meta.outputs.version }}/" Cargo.lock
+          perl -pi -w -e "s/0\\.0\\.0-git/${{ steps.meta.outputs.version }}/g;" Cargo.lock
 
       - name: Build
         run: cargo build --release
