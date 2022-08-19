@@ -1,0 +1,12 @@
+[Unit]
+Description=Proxy udp over websocket, useful to use Wireguard in restricted networks.
+After=network.target
+
+[Service]
+Type=simple
+Restart=always
+ExecStart=/usr/bin/zia-server
+EnvironmentFile=/etc/default/zia-server
+
+[Install]
+WantedBy=multi-user.target

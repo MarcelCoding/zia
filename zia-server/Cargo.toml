@@ -21,6 +21,14 @@ anyhow = "1.0"
 [target.'cfg(not(target_env = "msvc"))'.dependencies]
 tikv-jemallocator = "0.5"
 
+[package.metadata.deb]
+maintainer-scripts = "debian/"
+systemd-units = { enable = false }
+assets = [
+    ["target/release/zia-server", "/usr/bin/zia-server", "755"],
+    ["debian/default", "/etc/default/zia-server", "644"]
+]
+
 [package.metadata.generate-rpm]
 assets = [
 #    { source = "target/release/status-node", dest = "/usr/bin/status-node", mode = "0755" },

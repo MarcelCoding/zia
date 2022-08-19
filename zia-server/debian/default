@@ -1,0 +1,8 @@
+# public websocket listener (client -> ZIA_UPSTREAM)
+#ZIA_LISTEN_ADDR=0.0.0.0:1234
+
+# your actual udp service e.g. wireguard listener
+#ZIA_UPSTREAM=domain.tld:9999
+
+# WS or TCP see client -> ZIA_UPSTREAM
+ZIA_MODE=WS
