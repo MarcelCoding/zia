@@ -13,7 +13,7 @@ tracing-subscriber = { version = "0.3", features = ["tracing-log"] }
 tokio-tungstenite = { version = "0.17", default-features = false }
 futures-util = { version = "0.3", default-features = false }
 config = { version = "0.13", default-features = false }
-url = { version = "2.2", features = ["serde"] }
+url = { version = "2.3", features = ["serde"] }
 async-trait = "0.1"
 tracing = "0.1"
 anyhow = "1.0"
@@ -25,6 +25,6 @@ tikv-jemallocator = "0.5"
 
 [package.metadata.generate-rpm]
 assets = [
-#    { source = "target/release/status-node", dest = "/usr/bin/status-node", mode = "0755" },
+    #    { source = "target/release/status-node", dest = "/usr/bin/status-node", mode = "0755" },
     { source = "../LICENSE", dest = "/usr/share/doc/zia-client/LICENSE", doc = true, mode = "0644" },
 ]
