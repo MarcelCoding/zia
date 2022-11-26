@@ -60,6 +60,8 @@ jobs:
           sed -i'' "s/0\\.0\\.0-git/${{ steps.meta.outputs.version }}/" Cargo.lock
 
       - name: Build
+        env:
+          RUSTFLAGS: -C target-feature=+crt-static
         run: cross build --release --target ${{ matrix.target }}
 
       - name: Build deb
