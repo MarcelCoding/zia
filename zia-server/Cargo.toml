@@ -10,7 +10,7 @@ description = "Proxy udp over websocket, useful to use Wireguard in restricted n
 tokio = { version = "1.22", default-features = false, features = ["macros", "rt-multi-thread", "net", "signal", "sync"] }
 serde = { version = "1.0", default-features = false, features = ["derive"] }
 tracing-subscriber = { version = "0.3", features = ["tracing-log"] }
-tokio-tungstenite = { version = "0.17", default-features = false }
+tokio-tungstenite = { version = "0.18", default-features = false }
 futures-util = { version = "0.3", default-features = false }
 config = { version = "0.13", default-features = false }
 zia-common = { path = "../zia-common" }
