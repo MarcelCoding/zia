@@ -1,7 +1,7 @@
 #[cfg(not(target_env = "msvc"))]
 use tikv_jemallocator::Jemalloc;
 use tokio::signal::ctrl_c;
-use tokio::{select, signal};
+use tokio::select;
 use tracing::info;
 
 use crate::cfg::{ClientCfg, Mode};
@@ -51,7 +51,7 @@ async fn shutdown_signal() -> anyhow::Result<()> {
   #[cfg(unix)]
   {
     let terminate = async {
-      signal::unix::signal(signal::unix::SignalKind::terminate())
+      tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
         .expect("failed to install signal handler")
         .recv()
         .await;
