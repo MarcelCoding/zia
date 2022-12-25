@@ -7,7 +7,7 @@ license = "AGPL-3.0"
 description = "Proxy udp over websocket, useful to use Wireguard in restricted networks."
 
 [dependencies]
-tokio = { version = "1.22", default-features = false, features = ["macros", "net", "rt-multi-thread", "signal", "sync"] }
+tokio = { version = "1.23", default-features = false, features = ["macros", "net", "rt-multi-thread", "signal", "sync"] }
 serde = { version = "1.0", default-features = false, features = ["derive"] }
 tracing-subscriber = { version = "0.3", features = ["tracing-log"] }
 tokio-tungstenite = { version = "0.18", default-features = false, features = ["handshake"] }
