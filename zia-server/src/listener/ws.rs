@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use tokio::net::{TcpListener, TcpStream, UdpSocket};
 use tracing::{error, info};
-use zia_common::{process_udp_over_ws, Stream};
+use zia_common::process_udp_over_ws;
 use zia_common::Stream::Plain;
 
 use crate::listener::Listener;
