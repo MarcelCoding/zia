@@ -1,7 +1,7 @@
 #[cfg(not(target_env = "msvc"))]
 use tikv_jemallocator::Jemalloc;
-use tokio::signal::ctrl_c;
 use tokio::select;
+use tokio::signal::ctrl_c;
 use tracing::info;
 
 use crate::cfg::{ClientCfg, Mode};
@@ -32,7 +32,7 @@ async fn main() -> anyhow::Result<()> {
   info!("Listening in {}://{}...", config.mode, config.listen_addr);
 
   select! {
-    result = listener.listen(config.upstream) => {
+    result = listener.listen(&config.upstream) => {
       result?;
       info!("Socket closed, quitting...");
     },

@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use tokio::net::{TcpListener, TcpStream, UdpSocket};
 use tracing::{error, info};
-use zia_common::process_udp_over_ws;
+use zia_common::{process_udp_over_ws, Stream};
 use zia_common::Stream::Plain;
 
 use crate::listener::Listener;
@@ -14,12 +14,13 @@ pub(crate) struct WsListener {
 
 #[async_trait::async_trait]
 impl Listener for WsListener {
-  async fn listen(&self, upstream: SocketAddr) -> anyhow::Result<()> {
+  async fn listen(&self, upstream: &str) -> anyhow::Result<()> {
     let listener = TcpListener::bind(self.addr).await?;
     info!("Listening on ws://{}...", listener.local_addr()?);
 
     loop {
       let (sock, _) = listener.accept().await?;
+      let upstream = upstream.to_string();
 
       tokio::spawn(async move {
         if let Err(err) = Self::handle(sock, upstream).await {
@@ -31,7 +32,7 @@ impl Listener for WsListener {
 }
 
 impl WsListener {
-  async fn handle(downstream: TcpStream, upstream_addr: SocketAddr) -> anyhow::Result<()> {
+  async fn handle(downstream: TcpStream, upstream_addr: String) -> anyhow::Result<()> {
     downstream.set_nodelay(true)?;
     let downstream_addr = downstream.peer_addr()?;
     info!("New downstream connection: {}", downstream_addr);
