@@ -21,6 +21,7 @@ jobs:
           - aarch64-unknown-linux-gnu
           - armv7-unknown-linux-gnueabihf
           - aarch64-linux-android
+        linker: [ static, dynamic ]
 
     steps:
       - uses: actions/checkout@v3
@@ -41,7 +42,8 @@ jobs:
 
       - run: cargo install --force cross --git https://github.com/cross-rs/cross
       - run: cargo install --force cargo-deb
-#      - run: cargo install --force cargo-generate-rpm
+        if: matrix.linker == 'dynamic'
+      #      - run: cargo install --force cargo-generate-rpm
 
       - name: Find Version
         if: startsWith(github.ref, 'refs/tags/')
@@ -60,43 +62,53 @@ jobs:
 
           sed -i'' "s/0\\.0\\.0-git/${{ steps.meta.outputs.version }}/" Cargo.lock
 
+      - name: Configure for static
+        run: |
+          if [[ '${{ matrix.linker }}' == 'static' ]]; then
+            echo 'RUSTFLAGS=-C target-feature=+crt-static' >> $GITHUB_ENV
+            echo 'NAME_PREFIX=_static' >> $GITHUB_ENV 
+          fi
+
       - name: Build
         run: cross build --release --target ${{ matrix.target }}
 
       - name: Build deb
+        if: matrix.linker == 'dynamic'
         run: |
           cargo deb --no-build --no-strip --target ${{ matrix.target }} -p zia-client
           cargo deb --no-build --no-strip --target ${{ matrix.target }} -p zia-server
 
-#      - name: Build rpm
-#        run: |
-#          cargo generate-rpm --target ${{ matrix.target }} -p zia-client
-#          cargo generate-rpm --target ${{ matrix.target }}  -p zia-server
+      #      - name: Build rpm
+      #        run: |
+      #          cargo generate-rpm --target ${{ matrix.target }} -p zia-client
+      #          cargo generate-rpm --target ${{ matrix.target }}  -p zia-server
 
       - name: Rename binary
         run: |
-          mv target/${{ matrix.target }}/release/zia-client zia-client_${{ matrix.target }}
-          mv target/${{ matrix.target }}/release/zia-server zia-server_${{ matrix.target }}
+          mv target/${{ matrix.target }}/release/zia-client zia-client_${{ matrix.target }}${{ env.NAME_PREFIX }}
+          mv target/${{ matrix.target }}/release/zia-server zia-server_${{ matrix.target }}${{ env.NAME_PREFIX }}
 
       - name: Upload Artifact (client)
         uses: actions/upload-artifact@v3
         with:
-          name: zia-client_${{ matrix.target }}
-          path: zia-client_${{ matrix.target }}*
+          name: zia-client_${{ matrix.target }}${{ env.NAME_PREFIX }}
+          path: zia-client_${{ matrix.target }}${{ env.NAME_PREFIX }}
 
       - name: Upload Artifact (server)
         uses: actions/upload-artifact@v3
         with:
-          name: zia-server_${{ matrix.target }}
-          path: zia-server_${{ matrix.target }}*
+          name: zia-server_${{ matrix.target }}${{ env.NAME_PREFIX }}
+          path: zia-server_${{ matrix.target }}${{ env.NAME_PREFIX }}
 
       - name: Upload Artifact deb (client)
+        if: matrix.linker == 'dynamic'
         uses: actions/upload-artifact@v3
         with:
           name: zia-client_${{ matrix.target }}.deb
           path: target/${{ matrix.target }}/debian/zia-client_*.deb
 
       - name: Upload Artifact deb (server)
+        if: matrix.linker == 'dynamic'
         uses: actions/upload-artifact@v3
         with:
           name: zia-server_${{ matrix.target }}.deb
@@ -107,7 +119,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         with:
-          asset_paths: '["zia-client_${{ matrix.target }}","zia-server_${{ matrix.target }}","target/${{ matrix.target }}/debian/zia-client_${{ steps.meta.outputs.version }}_*.deb","target/${{ matrix.target }}/debian/zia-server_${{ steps.meta.outputs.version }}_*.deb"]'
+          asset_paths: '["zia-client_${{ matrix.target }}${{ env.NAME_PREFIX }}","zia-server_${{ matrix.target }}${{ env.NAME_PREFIX }}","target/${{ matrix.target }}/debian/zia-client_${{ steps.meta.outputs.version }}_*.deb","target/${{ matrix.target }}/debian/zia-server_${{ steps.meta.outputs.version }}_*.deb"]'
 
   build-native:
     needs: [ build ]

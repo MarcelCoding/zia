@@ -7,7 +7,7 @@ use serde::Deserialize;
 #[derive(Deserialize)]
 pub(crate) struct ClientCfg {
   pub(crate) listen_addr: SocketAddr,
-  pub(crate) upstream: SocketAddr,
+  pub(crate) upstream: String,
   pub(crate) mode: Mode,
 }
 

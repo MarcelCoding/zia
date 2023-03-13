@@ -15,11 +15,12 @@ pub(crate) struct TcpListener {
 
 #[async_trait::async_trait]
 impl Listener for TcpListener {
-  async fn listen(&self, upstream: SocketAddr) -> anyhow::Result<()> {
+  async fn listen(&self, upstream: &str) -> anyhow::Result<()> {
     let listener = tokio::net::TcpListener::bind(self.addr).await?;
 
     loop {
       let (sock, _) = listener.accept().await?;
+      let upstream = upstream.to_string();
 
       tokio::spawn(async move {
         if let Err(err) = Self::handle(sock, upstream).await {
@@ -31,7 +32,7 @@ impl Listener for TcpListener {
 }
 
 impl TcpListener {
-  async fn handle(downstream: TcpStream, upstream_addr: SocketAddr) -> anyhow::Result<()> {
+  async fn handle(downstream: TcpStream, upstream_addr: String) -> anyhow::Result<()> {
     downstream.set_nodelay(true)?;
     let downstream_addr = downstream.peer_addr()?;
     info!("New downstream connection: {}", downstream_addr);
