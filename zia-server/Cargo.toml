@@ -18,9 +18,6 @@ async-trait = "0.1"
 tracing = "0.1"
 anyhow = "1.0"
 
-[target.'cfg(not(target_env = "msvc"))'.dependencies]
-tikv-jemallocator = "0.5"
-
 [package.metadata.deb]
 maintainer-scripts = "debian/"
 systemd-units = { enable = false }
