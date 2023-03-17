@@ -1,15 +1,10 @@
-#[cfg(not(target_env = "msvc"))]
-use tikv_jemallocator::Jemalloc;
+
 use tokio::select;
 use tokio::signal::ctrl_c;
 use tracing::info;
 
 use crate::cfg::{ClientCfg, Mode};
 use crate::listener::{Listener, TcpListener, WsListener};
-
-#[cfg(not(target_env = "msvc"))]
-#[global_allocator]
-static GLOBAL: Jemalloc = Jemalloc;
 
 mod cfg;
 mod listener;

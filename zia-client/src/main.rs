@@ -1,8 +1,6 @@
 #![feature(entry_insert)]
 use std::net::SocketAddr;
 
-#[cfg(not(target_env = "msvc"))]
-use tikv_jemallocator::Jemalloc;
 use tokio::net::UdpSocket;
 use tokio::select;
 use tokio::signal::ctrl_c;
@@ -10,10 +8,6 @@ use tracing::info;
 use url::Url;
 
 use crate::cfg::ClientCfg;
-
-#[cfg(not(target_env = "msvc"))]
-#[global_allocator]
-static GLOBAL: Jemalloc = Jemalloc;
 
 mod cfg;
 mod handler;
