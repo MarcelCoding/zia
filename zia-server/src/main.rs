@@ -1,4 +1,4 @@
-
+use clap::Parser;
 use tokio::select;
 use tokio::signal::ctrl_c;
 use tracing::info;
@@ -11,9 +11,9 @@ mod listener;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-  tracing_subscriber::fmt::init();
+  let config = ClientCfg::parse();
 
-  let config = ClientCfg::load()?;
+  tracing_subscriber::fmt::init();
 
   let listener: Box<dyn Listener> = match config.mode {
     Mode::Ws => Box::new(WsListener {

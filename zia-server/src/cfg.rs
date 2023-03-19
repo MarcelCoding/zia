@@ -1,32 +1,25 @@
 use std::fmt::{Display, Formatter};
 use std::net::SocketAddr;
 
-use config::{Config, Environment};
-use serde::Deserialize;
+use clap::{Parser, ValueEnum};
 
-#[derive(Deserialize)]
+#[derive(Parser)]
+#[clap(version)]
 pub(crate) struct ClientCfg {
+  #[arg(short, long, env = "ZIA_LISTEN_ADDR", default_value = "0.0.0.0:1234")]
   pub(crate) listen_addr: SocketAddr,
+  #[arg(short, long, env = "ZIA_UPSTREAM")]
   pub(crate) upstream: String,
+  #[arg(short, long, env = "ZIA_MODE", default_value = "WS", value_enum)]
   pub(crate) mode: Mode,
 }
 
-#[derive(Deserialize)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+#[derive(ValueEnum, Clone)]
 pub(crate) enum Mode {
+  #[value(rename_all = "SCREAMING_SNAKE_CASE")]
   Ws,
+  #[value(rename_all = "SCREAMING_SNAKE_CASE")]
   Tcp,
-}
-
-impl ClientCfg {
-  pub(crate) fn load() -> anyhow::Result<Self> {
-    Ok(
-      Config::builder()
-        .add_source(Environment::with_prefix("ZIA"))
-        .build()?
-        .try_deserialize()?,
-    )
-  }
 }
 
 impl Display for Mode {

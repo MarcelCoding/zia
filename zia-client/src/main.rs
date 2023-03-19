@@ -1,5 +1,7 @@
 #![feature(entry_insert)]
+
 use std::net::SocketAddr;
+use clap::Parser;
 
 use tokio::net::UdpSocket;
 use tokio::select;
@@ -15,9 +17,9 @@ mod upstream;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-  tracing_subscriber::fmt::init();
+  let config = ClientCfg::parse();
 
-  let config = ClientCfg::load()?;
+  tracing_subscriber::fmt::init();
 
   select! {
     result = tokio::spawn(listen(config.listen_addr, config.upstream, config.proxy)) => {

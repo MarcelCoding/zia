@@ -8,11 +8,10 @@ description = "Proxy udp over websocket, useful to use Wireguard in restricted n
 
 [dependencies]
 tokio = { version = "1.26", default-features = false, features = ["macros", "net", "rt-multi-thread", "signal", "sync"] }
-serde = { version = "1.0", default-features = false, features = ["derive"] }
 tracing-subscriber = { version = "0.3", features = ["tracing-log"] }
 tokio-tungstenite = { version = "0.18", default-features = false, features = ["handshake"] }
 futures-util = { version = "0.3", default-features = false }
-config = { version = "0.13", default-features = false }
+clap = { version = "4.1", features = ["derive", "env"] }
 url = { version = "2.3", features = ["serde"] }
 async-trait = "0.1"
 tracing = "0.1"
