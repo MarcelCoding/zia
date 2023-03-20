@@ -38,7 +38,13 @@ impl<U: Upstream + Send> UdpHandler<U> {
         Entry::Vacant(vacant) => {
           info!("New socket at {}/udp, opening upstream connection...", addr);
 
-          let (sink, mut stream) = self.upstream.open().await?;
+          let (sink, mut stream) = match self.upstream.open().await {
+            Ok(conn) => conn,
+            Err(err) => {
+              warn!("Error while opening upstream connection: {err}");
+              continue;
+            }
+          };
 
           let known = self.known.clone();
           let socket = socket.clone();

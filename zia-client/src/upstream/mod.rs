@@ -13,7 +13,7 @@ pub(crate) async fn transmit(
   upstream: &Url,
   proxy: &Option<Url>,
 ) -> anyhow::Result<()> {
-  match upstream.scheme() {
+  match upstream.scheme().to_lowercase().as_str() {
     "tcp" | "tcps" => tcp::transmit(socket, upstream, proxy).await,
     "ws" | "wss" => ws::transmit(socket, upstream, proxy).await,
     _ => Err(anyhow!("Unsupported upstream scheme {}", upstream.scheme())),

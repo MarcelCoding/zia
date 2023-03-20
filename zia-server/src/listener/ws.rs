@@ -1,5 +1,4 @@
 use std::net::SocketAddr;
-use std::time::Duration;
 
 use tokio::net::{TcpListener, TcpStream, UdpSocket};
 use tracing::{error, info};
@@ -49,7 +48,7 @@ impl WsListener {
       downstream_addr
     );
 
-    process_udp_over_ws(upstream, downstream, Some(Duration::from_secs(60))).await;
+    process_udp_over_ws(upstream, downstream).await;
 
     info!("Connection with downstream {} closed...", downstream_addr);
 
