@@ -3,7 +3,6 @@
 use std::convert::Infallible;
 use std::mem;
 use std::sync::Arc;
-use std::time::Duration;
 
 use anyhow::Context;
 use futures_util::future::select;
@@ -17,7 +16,7 @@ use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::WebSocketStream;
 use tracing::error;
 
-use crate::{maybe_timeout, Stream};
+use crate::{Stream};
 
 /// A UDP datagram header has a 16 bit field containing an unsigned integer
 /// describing the length of the datagram (including the header itself).
@@ -32,7 +31,6 @@ const MAX_DATAGRAM_SIZE: usize = u16::MAX as usize - mem::size_of::<u16>();
 pub async fn process_udp_over_ws(
   udp_socket: UdpSocket,
   ws_stream: WebSocketStream<Stream<TcpStream>>,
-  ws_recv_timeout: Option<Duration>,
 ) {
   let (mut ws_out, mut ws_in) = ws_stream.split();
 
@@ -41,7 +39,7 @@ pub async fn process_udp_over_ws(
     let udp_out = udp_in.clone();
 
     let ws2udp = async {
-      if let Err(error) = process_ws2udp(&mut ws_in, udp_out, ws_recv_timeout).await {
+      if let Err(error) = process_ws2udp(&mut ws_in, udp_out).await {
         error!("Error: {}", error);
       }
     };
@@ -77,11 +75,9 @@ pub async fn process_udp_over_ws(
 async fn process_ws2udp(
   ws_in: &mut SplitStream<WebSocketStream<Stream<TcpStream>>>,
   udp_out: Arc<UdpSocket>,
-  ws_recv_timeout: Option<Duration>,
 ) -> anyhow::Result<()> {
-  while let Some(message) = maybe_timeout(ws_recv_timeout, ws_in.next())
+  while let Some(message) = ws_in.next()
     .await
-    .context("Timeout while reading from WS")?
     .transpose()
     .context("Failed reading from WS")?
   {

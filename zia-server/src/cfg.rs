@@ -10,15 +10,13 @@ pub(crate) struct ClientCfg {
   pub(crate) listen_addr: SocketAddr,
   #[arg(short, long, env = "ZIA_UPSTREAM")]
   pub(crate) upstream: String,
-  #[arg(short, long, env = "ZIA_MODE", default_value = "WS", value_enum)]
+  #[arg(short, long, env = "ZIA_MODE", default_value = "WS", value_enum, ignore_case(true))]
   pub(crate) mode: Mode,
 }
 
 #[derive(ValueEnum, Clone)]
 pub(crate) enum Mode {
-  #[value(rename_all = "SCREAMING_SNAKE_CASE")]
   Ws,
-  #[value(rename_all = "SCREAMING_SNAKE_CASE")]
   Tcp,
 }
 

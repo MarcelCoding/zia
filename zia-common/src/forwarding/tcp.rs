@@ -3,7 +3,6 @@
 use std::convert::{Infallible, TryFrom};
 use std::mem;
 use std::sync::Arc;
-use std::time::Duration;
 
 use anyhow::Context;
 use futures_util::future::select;
@@ -12,7 +11,7 @@ use tokio::io::{split, AsyncReadExt, AsyncWriteExt, ReadHalf, WriteHalf};
 use tokio::net::{TcpStream, UdpSocket};
 use tracing::error;
 
-use crate::{maybe_timeout, Stream};
+use crate::{Stream};
 
 /// A UDP datagram header has a 16 bit field containing an unsigned integer
 /// describing the length of the datagram (including the header itself).
@@ -29,14 +28,13 @@ const HEADER_LEN: usize = mem::size_of::<u16>();
 pub async fn process_udp_over_tcp(
   udp_socket: UdpSocket,
   tcp_stream: Stream<TcpStream>,
-  tcp_recv_timeout: Option<Duration>,
 ) {
   let udp_in = Arc::new(udp_socket);
   let udp_out = udp_in.clone();
   let (tcp_in, tcp_out) = split(tcp_stream);
 
   let tcp2udp = tokio::spawn(async move {
-    if let Err(error) = process_tcp2udp(tcp_in, udp_out, tcp_recv_timeout).await {
+    if let Err(error) = process_tcp2udp(tcp_in, udp_out).await {
       error!("Error: {}", error);
     }
   });
@@ -58,16 +56,14 @@ pub async fn process_udp_over_tcp(
 /// Returns if the TCP socket is closed, or an IO error happens on either socket.
 async fn process_tcp2udp(
   mut tcp_in: ReadHalf<Stream<TcpStream>>,
-  udp_out: Arc<UdpSocket>,
-  tcp_recv_timeout: Option<Duration>,
+  udp_out: Arc<UdpSocket>
 ) -> anyhow::Result<()> {
   let mut buffer = datagram_buffer();
   // `buffer` has unprocessed data from the TCP socket up until this index.
   let mut unprocessed_i = 0;
   loop {
-    let tcp_read_len = maybe_timeout(tcp_recv_timeout, tcp_in.read(&mut buffer[unprocessed_i..]))
+    let tcp_read_len = tcp_in.read(&mut buffer[unprocessed_i..])
       .await
-      .context("Timeout while reading from TCP")?
       .context("Failed reading from TCP")?;
     if tcp_read_len == 0 {
       break;
