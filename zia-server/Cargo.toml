@@ -7,11 +7,11 @@ license = "AGPL-3.0"
 description = "Proxy udp over websocket, useful to use Wireguard in restricted networks."
 
 [dependencies]
-tokio = { version = "1.26", default-features = false, features = ["macros", "rt-multi-thread", "net", "signal", "sync"] }
-tokio-tungstenite = { version = "0.18", default-features = false, features = ["handshake"] }
+tokio = { version = "1.29", default-features = false, features = ["macros", "rt-multi-thread", "net", "signal", "sync"] }
+tokio-tungstenite = { version = "0.20", default-features = false, features = ["handshake"] }
 tracing-subscriber = { version = "0.3", features = ["tracing-log"] }
 futures-util = { version = "0.3", default-features = false }
-clap = { version = "4.1", features = ["derive", "env"] }
+clap = { version = "4.3", features = ["derive", "env"] }
 zia-common = { path = "../zia-common" }
 async-trait = "0.1"
 tracing = "0.1"
