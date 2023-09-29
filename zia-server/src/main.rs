@@ -1,13 +1,7 @@
-use clap::Parser;
-use tokio::select;
-use tokio::signal::ctrl_c;
-use tracing::info;
-
 use crate::cfg::{ClientCfg, Mode};
-use crate::listener::{Listener, TcpListener, WsListener};
 
 mod cfg;
-mod listener;
+mod app;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {

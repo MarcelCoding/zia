@@ -12,4 +12,6 @@ pub(crate) struct ClientCfg {
   pub(crate) upstream: Url,
   #[arg(short, long, env = "ZIA_PROXY")]
   pub(crate) proxy: Option<Url>,
+  #[arg(short, long, env = "ZIA_COUNT")]
+  pub(crate) count: usize,
 }
