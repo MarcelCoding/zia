@@ -1,7 +1,7 @@
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use crate::MAX_DATAGRAM_SIZE;
+use crate::{datagram_buffer, MAX_DATAGRAM_SIZE};
 use tokio::io::{AsyncWrite, WriteHalf};
 use tokio::net::UdpSocket;
 use tokio::sync::RwLock;
@@ -82,14 +82,4 @@ impl<W: AsyncWrite + Send + 'static> WritePool<W> {
       });
     }
   }
-}
-
-/// Creates  and returns a buffer on the heap with enough space to contain any possible
-/// UDP datagram.
-///
-/// This is put on the heap and in a separate function to avoid the 64k buffer from ending
-/// up on the stack and blowing up the size of the futures using it.
-#[inline(never)]
-fn datagram_buffer() -> Box<[u8; MAX_DATAGRAM_SIZE]> {
-  Box::new([0u8; MAX_DATAGRAM_SIZE])
 }

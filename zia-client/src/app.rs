@@ -9,7 +9,7 @@ use hyper::header::{
 use hyper::upgrade::Upgraded;
 use hyper::{Body, Request};
 use once_cell::sync::Lazy;
-use tokio::io::split;
+use tokio::io::{split, BufStream};
 use tokio::net::TcpStream;
 use tokio_rustls::rustls::{ClientConfig, OwnedTrustAnchor, RootCertStore, ServerName};
 use tokio_rustls::TlsConnector;
@@ -88,6 +88,8 @@ pub(crate) async fn open_connection(
       stream
     }
   };
+
+  let stream = BufStream::new(stream);
 
   let req = Request::get(upstream.to_string())
     .header(HOST, format!("{}:{}", upstream_host, upstream_port))

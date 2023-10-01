@@ -8,6 +8,7 @@ use tokio::select;
 use tokio::sync::{Mutex, RwLock};
 use tokio::task::{JoinError, JoinSet};
 use tracing::error;
+use crate::datagram_buffer;
 
 use crate::ws::{Event, WebSocket};
 
@@ -24,13 +25,14 @@ impl<R: AsyncRead> ReadConnection<R> {
     &mut self,
     socket: &UdpSocket,
     addr: &RwLock<Option<SocketAddr>>,
+    buf: &mut [u8],
   ) -> anyhow::Result<()> {
-    let event = self.read.recv().await?;
+    let event = self.read.recv(buf).await?;
 
     match event {
       Event::Data(data) => {
         let addr = addr.read().await.unwrap();
-        socket.send_to(&data, addr).await?;
+        socket.send_to(data, addr).await?;
       }
       Event::Close { .. } => {}
     }
@@ -53,6 +55,7 @@ impl ReadPool {
       tasks: Mutex::new(JoinSet::new()),
     }
   }
+
   async fn wait(&self) -> Option<Result<anyhow::Result<()>, JoinError>> {
     let mut set = self.tasks.lock().await;
     select! {
@@ -81,8 +84,9 @@ impl ReadPool {
     let addr = self.addr.clone();
 
     self.tasks.lock().await.spawn(async move {
+      let mut buf = datagram_buffer();
       loop {
-        conn.handle_frame(&socket, &addr).await?;
+        conn.handle_frame(&socket, &addr,  buf.as_mut()).await?;
       }
     });
   }

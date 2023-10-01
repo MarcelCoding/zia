@@ -9,34 +9,9 @@ pub enum Role {
   Client { masking: bool },
 }
 
-/// It represent the type of data that is being sent over the WebSocket connection.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum MessageType {
-  /// `Text` data is represented as a sequence of Unicode characters encoded using UTF-8 encoding.
-  Text = 1,
-  /// `Binary` data can be any sequence of bytes and is typically used for sending non-textual data, such as images, audio files etc...
-  Binary = 2,
-}
-
-impl MessageType {
-  /// Returns `true` if message type is text
-  #[inline]
-  pub fn is_text(&self) -> bool {
-    matches!(self, MessageType::Text)
-  }
-
-  /// Returns `true` if message type is binary
-  #[inline]
-  pub fn is_binary(&self) -> bool {
-    matches!(self, MessageType::Binary)
-  }
-}
-
-#[derive(Debug)]
-pub enum Event {
-  Data(Box<[u8]>),
-
-  Close { code: CloseCode, reason: Box<str> },
+pub enum Event<'a> {
+  Data(&'a [u8]),
+  Close { code: CloseCode, reason: String },
 }
 
 /// When closing an established connection an endpoint MAY indicate a reason for closure.
