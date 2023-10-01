@@ -17,9 +17,10 @@ url = { version = "2.4", features = ["serde"] }
 webpki-roots = "0.25"
 tokio-rustls = "0.24"
 once_cell = "1.18"
-anyhow = "1.0"
 tracing = "0.1"
+anyhow = "1.0"
 
+zia-common = { path = '../zia-common' }
 
 [package.metadata.generate-rpm]
 assets = [

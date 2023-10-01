@@ -1,33 +1,145 @@
-use crate::cfg::{ClientCfg, Mode};
+use std::convert::Infallible;
+use std::future::Future;
+use std::net::SocketAddr;
+use std::pin::Pin;
+use std::sync::Arc;
+use std::task::{Context, Poll};
+
+use clap::Parser;
+use hyper::{Body, Request, Response, Server, StatusCode};
+use hyper::service::{make_service_fn, Service};
+use hyper::upgrade::Upgraded;
+use tokio::io::split;
+use tokio::net::UdpSocket;
+use tokio::select;
+use tokio::signal::ctrl_c;
+use tokio::sync::RwLock;
+use tokio::task::JoinHandle;
+use tracing::info;
+
+use zia_common::{MAX_DATAGRAM_SIZE, ReadConnection, ReadPool, WriteConnection, WritePool};
+use zia_common::ws::{Role, WebSocket};
+
+use crate::cfg::ServerCfg;
 
 mod cfg;
-mod app;
+
+#[pin_project::pin_project]
+struct FutA {
+  req: Request<Body>,
+  read: Arc<ReadPool>,
+  write: Arc<WritePool<Upgraded>>,
+}
+
+impl Future for FutA {
+  type Output = Result<Response<Body>, Infallible>;
+
+  fn poll(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
+    let this = self.project();
+
+    if !fastwebsockets::upgrade::is_upgrade_request(this.req) {
+      return Poll::Ready(Ok(
+        Response::builder()
+          .status(StatusCode::BAD_REQUEST)
+          .body(Body::from("bad request: expected websocket upgrade"))
+          .unwrap(),
+      ));
+    }
+
+    let (resp, upgrade) = fastwebsockets::upgrade::upgrade(this.req).unwrap();
+
+    let wread = this.read.clone();
+    let wwrite = this.write.clone();
+
+    tokio::spawn(async move {
+      let ws = upgrade.await.unwrap().into_inner();
+      let (read, write) = split(ws);
+
+      let read = WebSocket::new(read, MAX_DATAGRAM_SIZE, Role::Server);
+      let write = WebSocket::new(write, MAX_DATAGRAM_SIZE, Role::Server);
+
+      wread.push(ReadConnection::new(read)).await;
+      wwrite.push(WriteConnection::new(write)).await;
+    });
+
+    Poll::Ready(Ok(resp))
+  }
+}
+
+// mod app;
+struct Handler {
+  read: Arc<ReadPool>,
+  write: Arc<WritePool<Upgraded>>,
+}
+
+impl Service<Request<Body>> for Handler {
+  type Response = Response<Body>;
+  type Error = Infallible;
+  type Future = FutA;
+
+  fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+    Poll::Ready(Ok(()))
+  }
+
+  fn call(&mut self, req: Request<Body>) -> Self::Future {
+    FutA {
+      req,
+      read: self.read.clone(),
+      write: self.write.clone(),
+    }
+  }
+}
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-  let config = ClientCfg::parse();
+  let config = ServerCfg::parse();
 
   tracing_subscriber::fmt::init();
 
-  let listener: Box<dyn Listener> = match config.mode {
-    Mode::Ws => Box::new(WsListener {
-      addr: config.listen_addr,
-    }),
-    Mode::Tcp => Box::new(TcpListener {
-      addr: config.listen_addr,
-    }),
-  };
+  let socket = Arc::new(UdpSocket::bind(Into::<SocketAddr>::into(([0, 0, 0, 0], 0))).await?);
+  socket.connect(&config.upstream).await?;
+  info!("Connected to upstream udp://{}...", config.upstream);
 
-  info!("Listening in {}://{}...", config.mode, config.listen_addr);
+  let addr = Arc::new(RwLock::new(Some(socket.peer_addr()?)));
+  let write_pool = Arc::new(WritePool::new(socket.clone(), addr.clone()));
+  let read_pool = Arc::new(ReadPool::new(socket, addr));
+
+  let wp = write_pool.clone();
+  let rp = read_pool.clone();
+
+  let make_service = make_service_fn(|_conn| {
+    let read = rp.clone();
+    let write = wp.clone();
+
+    async move { Ok::<_, Infallible>(Handler { read, write }) }
+  });
+
+  let server = Server::bind(&config.listen_addr).serve(make_service);
+
+  info!("Listening on {}://{}...", config.mode, config.listen_addr);
+
+  let write_handle: JoinHandle<anyhow::Result<()>> = tokio::spawn(async move {
+    loop {
+      write_pool.execute().await?;
+    }
+  });
 
   select! {
-    result = listener.listen(&config.upstream) => {
-      result?;
+    result = server => {
       info!("Socket closed, quitting...");
+      result?;
+    },
+      result = write_handle => {
+      info!("Write pool finished");
+      result??;
+    },
+    result = read_pool.join() => {
+      info!("Read pool finished");
+      result?;
     },
     result = shutdown_signal() => {
-      result?;
       info!("Termination signal received, quitting...");
+      result?;
     }
   }
 

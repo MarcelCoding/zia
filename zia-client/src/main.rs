@@ -1,18 +1,18 @@
-use std::convert::Infallible;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use crate::app::{Connection, WritePool};
 use clap::Parser;
-use fastwebsockets::{Frame, OpCode, Payload};
 use tokio::net::UdpSocket;
 use tokio::select;
 use tokio::signal::ctrl_c;
-use tokio::sync::Mutex;
+use tokio::sync::RwLock;
 use tokio::task::JoinSet;
-use tracing::{error, info};
+use tracing::info;
 use url::Url;
 
+use zia_common::{ReadPool, WritePool};
+
+use crate::app::open_connection;
 use crate::cfg::ClientCfg;
 
 mod app;
@@ -80,77 +80,36 @@ async fn listen(
   for _ in 0..connection_count {
     let upstream = upstream.clone();
     let proxy = proxy.clone();
-    conns.spawn(async move { Connection::new(&upstream, &proxy).await });
+    conns.spawn(async move { open_connection(&upstream, &proxy).await });
   }
 
-  let mut connections = Vec::new();
-  let mut read_pool = Vec::new();
+  let addr = Arc::new(RwLock::new(Option::None));
+
+  let write_pool = WritePool::new(socket.clone(), addr.clone());
+  let read_pool = ReadPool::new(socket, addr);
 
   while let Some(connection) = conns.join_next().await.transpose()? {
-    let (conn, read) = connection?;
-    connections.push(conn);
-    read_pool.push(read);
+    let (read, write) = connection?;
+    read_pool.push(read).await;
+    write_pool.push(write).await;
   }
 
   info!("Connected to upstream");
 
-  let addr = Arc::new(Mutex::new(Option::None));
+  let write_handle = tokio::spawn(async move {
+    loop {
+      write_pool.execute().await?;
+    }
+  });
 
-  async fn test(_: Frame<'_>) -> Result<(), Infallible> {
-    todo!()
-  }
-
-  for mut ws_read in read_pool {
-    let addr = addr.clone();
-    let socket = socket.clone();
-
-    tokio::spawn(async move {
-      loop {
-        let frame = ws_read.read_frame(&mut test).await.unwrap();
-
-        if !frame.fin {
-          error!(
-            "unexpected buffer received, expect full udp frame to be in one websocket message"
-          );
-          continue;
-        }
-
-        match frame.opcode {
-          OpCode::Binary => match frame.payload {
-            Payload::BorrowedMut(payload) => {
-              socket
-                .send_to(payload, addr.lock().await.unwrap())
-                .await
-                .unwrap();
-            }
-            Payload::Borrowed(payload) => {
-              socket
-                .send_to(payload, addr.lock().await.unwrap())
-                .await
-                .unwrap();
-            }
-            Payload::Owned(payload) => {
-              socket
-                .send_to(&payload, addr.lock().await.unwrap())
-                .await
-                .unwrap();
-            }
-          },
-          opcode => error!("Unexpected opcode: {:?}", opcode),
-        }
-      }
-    });
-  }
-
-  let socket = socket.clone();
-  let old_addr = addr.clone();
-
-  let mut pool = WritePool {
-    connections,
-    next: 0,
-  };
-
-  loop {
-    pool.write(&socket, old_addr.clone()).await?;
+  select! {
+    result = write_handle => {
+      info!("Write pool finished");
+      result?
+    },
+    result = read_pool.join() => {
+      info!("Read pool finished");
+      result
+    },
   }
 }
