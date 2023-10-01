@@ -6,9 +6,9 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 
 use clap::Parser;
-use hyper::{Body, Request, Response, Server, StatusCode};
 use hyper::service::{make_service_fn, Service};
 use hyper::upgrade::Upgraded;
+use hyper::{Body, Request, Response, Server, StatusCode};
 use tokio::io::split;
 use tokio::net::UdpSocket;
 use tokio::select;
@@ -17,8 +17,8 @@ use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
 use tracing::info;
 
-use zia_common::{MAX_DATAGRAM_SIZE, ReadConnection, ReadPool, WriteConnection, WritePool};
 use zia_common::ws::{Role, WebSocket};
+use zia_common::{ReadConnection, ReadPool, WriteConnection, WritePool, MAX_DATAGRAM_SIZE};
 
 use crate::cfg::ServerCfg;
 

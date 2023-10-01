@@ -6,7 +6,7 @@ mod ws;
 
 pub enum Role {
   Server,
-  Client,
+  Client { masking: bool },
 }
 
 /// It represent the type of data that is being sent over the WebSocket connection.

@@ -25,7 +25,7 @@ async fn main() -> anyhow::Result<()> {
   tracing_subscriber::fmt::init();
 
   select! {
-    result = tokio::spawn(listen(config.listen_addr, config.upstream, config.proxy, config.count)) => {
+    result = tokio::spawn(listen(config.listen_addr, config.upstream, config.proxy, config.count, config.websocket_masking)) => {
       result??;
       info!("Socket closed, quitting...");
     },
@@ -70,6 +70,7 @@ async fn listen(
   upstream: Url,
   proxy: Option<Url>,
   connection_count: usize,
+  websocket_masking: bool,
 ) -> anyhow::Result<()> {
   let socket = Arc::new(UdpSocket::bind(addr).await?);
 
@@ -80,7 +81,8 @@ async fn listen(
   for _ in 0..connection_count {
     let upstream = upstream.clone();
     let proxy = proxy.clone();
-    conns.spawn(async move { open_connection(&upstream, &proxy).await });
+    let websocket_masking = websocket_masking;
+    conns.spawn(async move { open_connection(&upstream, &proxy, websocket_masking).await });
   }
 
   let addr = Arc::new(RwLock::new(Option::None));

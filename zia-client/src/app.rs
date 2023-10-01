@@ -36,6 +36,7 @@ static TLS_CONNECTOR: Lazy<TlsConnector> = Lazy::new(|| {
 pub(crate) async fn open_connection(
   upstream: &Url,
   proxy: &Option<Url>,
+  websocket_masking: bool,
 ) -> anyhow::Result<(ReadConnection<Upgraded>, WriteConnection<Upgraded>)> {
   let upstream_host = upstream
     .host_str()
@@ -111,8 +112,20 @@ pub(crate) async fn open_connection(
 
   let (read, write) = split(ws.into_inner());
 
-  let read = WebSocket::new(read, MAX_DATAGRAM_SIZE, Role::Client);
-  let write = WebSocket::new(write, MAX_DATAGRAM_SIZE, Role::Client);
+  let read = WebSocket::new(
+    read,
+    MAX_DATAGRAM_SIZE,
+    Role::Client {
+      masking: websocket_masking,
+    },
+  );
+  let write = WebSocket::new(
+    write,
+    MAX_DATAGRAM_SIZE,
+    Role::Client {
+      masking: websocket_masking,
+    },
+  );
 
   Ok((ReadConnection::new(read), WriteConnection::new(write)))
 }

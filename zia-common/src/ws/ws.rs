@@ -1,14 +1,14 @@
-use std::io::{IoSlice, Result};
+use std::io::Result;
 
 use anyhow::anyhow;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
-use crate::ws::{CloseReason, Event, Frame, Role};
+use crate::ws::{Event, Frame, Role};
 
 /// WebSocket implementation for both client and server
-pub struct WebSocket<Stream> {
+pub struct WebSocket<IO> {
   /// it is a low-level abstraction that represents the underlying byte stream over which WebSocket messages are exchanged.
-  pub stream: Stream,
+  pub io: IO,
 
   /// Maximum allowed payload length in bytes.
   pub max_payload_len: usize,
@@ -21,7 +21,7 @@ impl<IO> WebSocket<IO> {
   #[inline]
   pub fn new(stream: IO, max_payload_len: usize, role: Role) -> Self {
     Self {
-      stream,
+      io: stream,
       max_payload_len,
       role,
       is_closed: false,
@@ -29,64 +29,43 @@ impl<IO> WebSocket<IO> {
   }
 }
 
-impl<W> WebSocket<W>
-where
-  W: Unpin + AsyncWrite,
-{
-  #[doc(hidden)]
-  pub async fn send_raw(&mut self, frame: Frame<'_>) -> Result<()> {
-    let buf = match self.role {
-      Role::Server => {
-        if self.stream.is_write_vectored() {
-          let mut head = [0; 10];
-          let head_len = unsafe { frame.encode_header_unchecked(head.as_mut_ptr(), 0) };
-          let total_len = head_len + frame.data.len();
-
-          let mut bufs = [IoSlice::new(&head[..head_len]), IoSlice::new(frame.data)];
-          let mut amt = self.stream.write_vectored(&bufs).await?;
-          if amt == total_len {
-            return Ok(());
-          }
-          while amt < head_len {
-            bufs[0] = IoSlice::new(&head[amt..head_len]);
-            amt += self.stream.write_vectored(&bufs).await?;
-          }
-          if amt < total_len {
-            self.stream.write_all(&frame.data[amt - head_len..]).await?;
-          }
-          return Ok(());
+impl<W: Unpin + AsyncWrite> WebSocket<W> {
+  pub async fn send(&mut self, frame: Frame<'_>) -> anyhow::Result<()> {
+    match self.role {
+      Role::Server => frame.write_without_mask(&mut self.io).await?,
+      Role::Client { masking } => {
+        if masking {
+          let mask = rand::random::<u32>().to_ne_bytes();
+          frame.write_with_mask(&mut self.io, mask).await?;
+        } else {
+          frame.write_without_mask(&mut self.io).await?;
         }
-        frame.encode_without_mask()
       }
-      Role::Client => frame.encode_with(rand::random::<u32>().to_ne_bytes()),
-    };
-    self.stream.write_all(&buf).await
+    }
+
+    Ok(())
   }
 
-  /// Send message to a endpoint.
-  pub async fn send(&mut self, data: impl Into<Frame<'_>>) -> Result<()> {
-    self.send_raw(data.into()).await
-  }
+  // TODO: implement close
+  // pub async fn close<T>(mut self, reason: T) -> anyhow::Result<()>
+  // where
+  //   T: CloseReason,
+  //   T::Bytes: AsRef<[u8]>,
+  // {
+  //   let frame = Frame {
+  //     fin: true,
+  //     opcode: 8,
+  //     data: reason.to_bytes().as_ref(),
+  //   };
+  //
+  //   self.send(frame).await?;
+  //   self.flush().await?;
+  //   Ok(())
+  // }
 
-  /// - The Close frame MAY contain a body that indicates a reason for closing.
-  pub async fn close<T>(mut self, reason: T) -> Result<()>
-  where
-    T: CloseReason,
-    T::Bytes: AsRef<[u8]>,
-  {
-    self
-      .send_raw(Frame {
-        fin: true,
-        opcode: 8,
-        data: reason.to_bytes().as_ref(),
-      })
-      .await?;
-    self.stream.flush().await
-  }
-
-  /// Flushes this output stream, ensuring that all intermediately buffered contents reach their destination.
-  pub async fn flash(&mut self) -> Result<()> {
-    self.stream.flush().await
+  pub async fn flush(&mut self) -> anyhow::Result<()> {
+    self.io.flush().await?;
+    Ok(())
   }
 }
 
@@ -138,7 +117,7 @@ where
   /// reads [Event] from websocket stream.
   pub async fn recv_event(&mut self) -> anyhow::Result<Event> {
     let mut buf = [0u8; 2];
-    self.stream.read_exact(&mut buf).await?;
+    self.io.read_exact(&mut buf).await?;
 
     let [b1, b2] = buf;
 
@@ -168,9 +147,10 @@ where
     //
     // A server MUST NOT mask any frames that it sends to the client.
     if let Role::Server = self.role {
-      if !is_masked {
-        err!("expected masked frame");
-      }
+      // TODO: disabled, to allow unmasked client frames
+      // if !is_masked {
+      //   err!("expected masked frame");
+      // }
     } else if is_masked {
       err!("expected unmasked frame");
     }
@@ -183,7 +163,7 @@ where
       if len > 125 {
         err!("control frame must have a payload length of 125 bytes or less");
       }
-      let msg = self.read_payload(len).await?;
+      let msg = self.read_payload(is_masked, len).await?;
       match opcode {
         8 => on_close(&msg),
         // 9 => Ok(Event::Ping(msg)),
@@ -197,32 +177,36 @@ where
         _ => err!("invalid data frame"),
       };
       let len = match len {
-        126 => self.stream.read_u16().await? as usize,
-        127 => self.stream.read_u64().await? as usize,
+        126 => self.io.read_u16().await? as usize,
+        127 => self.io.read_u64().await? as usize,
         len => len,
       };
       if len > self.max_payload_len {
         err!("payload too large");
       }
-      let data = self.read_payload(len).await?;
+      let data = self.read_payload(is_masked, len).await?;
       Ok(Event::Data(data))
     }
   }
 
-  async fn read_payload(&mut self, len: usize) -> Result<Box<[u8]>> {
+  async fn read_payload(&mut self, masked: bool, len: usize) -> Result<Box<[u8]>> {
     let mut data = vec![0; len].into_boxed_slice();
     match self.role {
       Role::Server => {
-        let mut mask = [0u8; 4];
-        self.stream.read_exact(&mut mask).await?;
-        self.stream.read_exact(&mut data).await?;
-        // TODO: Use SIMD wherever possible for best performance
-        for i in 0..data.len() {
-          data[i] ^= mask[i & 3];
+        if masked {
+          let mut mask = [0u8; 4];
+          self.io.read_exact(&mut mask).await?;
+          self.io.read_exact(&mut data).await?;
+          // TODO: Use SIMD wherever possible for best performance
+          for i in 0..data.len() {
+            data[i] ^= mask[i & 3];
+          }
+        } else {
+          self.io.read_exact(&mut data).await?;
         }
       }
-      Role::Client => {
-        self.stream.read_exact(&mut data).await?;
+      Role::Client { .. } => {
+        self.io.read_exact(&mut data).await?;
       }
     }
     Ok(data)
