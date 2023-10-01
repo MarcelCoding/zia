@@ -123,11 +123,11 @@ where
 
     match frame.opcode {
       OpCode::Continuation => Err(anyhow!("framed messages are not supported")),
-      OpCode::Text => Err(anyhow!("text framed are not supported")),
+      OpCode::Text => Err(anyhow!("text frames are not supported")),
       OpCode::Binary => Ok(Event::Data(frame.data)),
       OpCode::Close => Ok(parse_close_body(frame.data)?),
       OpCode::Ping => Err(anyhow!("ping frames are not supported")),
-      OpCode::Pong => Err(anyhow!("pong framed are not supported")),
+      OpCode::Pong => Err(anyhow!("pong frames are not supported")),
     }
   }
 }
