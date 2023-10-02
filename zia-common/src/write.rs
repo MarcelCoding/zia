@@ -8,7 +8,7 @@ use tokio::sync::RwLock;
 use tracing::error;
 
 use crate::pool::Pool;
-use crate::ws::{Frame, WebSocket};
+use crate::ws::{Message, WebSocket};
 
 pub struct WriteConnection<W> {
   write: WebSocket<WriteHalf<W>>,
@@ -26,8 +26,8 @@ impl<W: AsyncWrite> WriteConnection<W> {
   async fn flush(&mut self, size: usize) -> anyhow::Result<()> {
     assert!(size <= MAX_DATAGRAM_SIZE);
 
-    let frame = Frame::binary(&self.buf[..size]);
-    self.write.send(frame).await?;
+    let message = Message::Binary(&self.buf[..size]);
+    self.write.send(message).await?;
 
     Ok(())
   }

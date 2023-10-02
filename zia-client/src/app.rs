@@ -9,7 +9,7 @@ use hyper::header::{
 use hyper::upgrade::Upgraded;
 use hyper::{Body, Request};
 use once_cell::sync::Lazy;
-use tokio::io::{split, BufStream};
+use tokio::io::BufStream;
 use tokio::net::TcpStream;
 use tokio_rustls::rustls::{ClientConfig, OwnedTrustAnchor, RootCertStore, ServerName};
 use tokio_rustls::TlsConnector;
@@ -112,22 +112,15 @@ pub(crate) async fn open_connection(
 
   info!("Finished websocket handshake");
 
-  let (read, write) = split(ws.into_inner());
+  let ws = WebSocket::new(
+    ws.into_inner(),
+    MAX_DATAGRAM_SIZE,
+    Role::Client {
+      masking: websocket_masking,
+    },
+  );
 
-  let read = WebSocket::new(
-    read,
-    MAX_DATAGRAM_SIZE,
-    Role::Client {
-      masking: websocket_masking,
-    },
-  );
-  let write = WebSocket::new(
-    write,
-    MAX_DATAGRAM_SIZE,
-    Role::Client {
-      masking: websocket_masking,
-    },
-  );
+  let (read, write) = ws.split();
 
   Ok((ReadConnection::new(read), WriteConnection::new(write)))
 }

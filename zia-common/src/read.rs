@@ -2,15 +2,15 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
+use crate::datagram_buffer;
 use tokio::io::{AsyncRead, ReadHalf};
 use tokio::net::UdpSocket;
 use tokio::select;
 use tokio::sync::{Mutex, RwLock};
 use tokio::task::{JoinError, JoinSet};
 use tracing::error;
-use crate::datagram_buffer;
 
-use crate::ws::{Event, WebSocket};
+use crate::ws::{Message, WebSocket};
 
 pub struct ReadConnection<R> {
   read: WebSocket<ReadHalf<R>>,
@@ -30,11 +30,11 @@ impl<R: AsyncRead> ReadConnection<R> {
     let event = self.read.recv(buf).await?;
 
     match event {
-      Event::Data(data) => {
+      Message::Binary(data) => {
         let addr = addr.read().await.unwrap();
         socket.send_to(data, addr).await?;
       }
-      Event::Close { .. } => {}
+      Message::Close { .. } => {}
     }
 
     Ok(())
@@ -86,7 +86,7 @@ impl ReadPool {
     self.tasks.lock().await.spawn(async move {
       let mut buf = datagram_buffer();
       loop {
-        conn.handle_frame(&socket, &addr,  buf.as_mut()).await?;
+        conn.handle_frame(&socket, &addr, buf.as_mut()).await?;
       }
     });
   }

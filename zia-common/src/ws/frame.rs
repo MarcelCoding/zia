@@ -3,7 +3,7 @@ use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 #[repr(u8)]
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
-pub enum OpCode {
+pub(crate) enum OpCode {
   Continuation = 0x0,
   Text = 0x1,
   Binary = 0x2,
@@ -28,23 +28,42 @@ impl TryFrom<u8> for OpCode {
   }
 }
 
-pub struct Frame<'a> {
-  pub fin: bool,
-  pub opcode: OpCode,
-  pub data: &'a [u8],
+pub(crate) struct Frame<'a> {
+  pub(crate) fin: bool,
+  pub(crate) opcode: OpCode,
+  pub(crate) data: &'a [u8],
 }
 
 impl<'a> Frame<'a> {
   #[inline]
-  pub fn binary(data: &'a [u8]) -> Self {
-    Self {
-      fin: true,
-      opcode: OpCode::Binary,
-      data,
-    }
+  pub(crate) fn new(fin: bool, opcode: OpCode, data: &'a [u8]) -> Self {
+    Self { fin, opcode, data }
   }
 
-  pub async fn read<R: Unpin + AsyncRead>(
+  /// ### WebSocket Frame Header
+  /// <https://datatracker.ietf.org/doc/html/rfc6455#section-5.2>
+  ///
+  /// ```txt
+  ///  0                   1                   2                   3
+  ///  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+  /// +-+-+-+-+-------+-+-------------+-------------------------------+
+  /// |F|R|R|R| opcode|M| Payload len |    Extended payload length    |
+  /// |I|S|S|S|  (4)  |A|     (7)     |             (16/64)           |
+  /// |N|V|V|V|       |S|             |   (if payload len==126/127)   |
+  /// | |1|2|3|       |K|             |                               |
+  /// +-+-+-+-+-------+-+-------------+ - - - - - - - - - - - - - - - +
+  /// |     Extended payload length continued, if payload len == 127  |
+  /// + - - - - - - - - - - - - - - - +-------------------------------+
+  /// |                               |Masking-key, if MASK set to 1  |
+  /// +-------------------------------+-------------------------------+
+  /// | Masking-key (continued)       |          Payload Data         |
+  /// +-------------------------------- - - - - - - - - - - - - - - - +
+  /// :                     Payload Data continued ...                :
+  /// + - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - +
+  /// |                     Payload Data continued ...                |
+  /// +---------------------------------------------------------------+
+  /// ```
+  pub(crate) async fn read<R: Unpin + AsyncRead>(
     read: &mut R,
     buf: &'a mut [u8],
     max_payload_len: usize,
@@ -100,7 +119,7 @@ impl<'a> Frame<'a> {
     })
   }
 
-  pub async fn write_without_mask<W: Unpin + AsyncWrite>(
+  pub(crate) async fn write_without_mask<W: Unpin + AsyncWrite>(
     self,
     write: &mut W,
   ) -> anyhow::Result<()> {

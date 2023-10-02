@@ -1,17 +1,20 @@
-pub use frame::Frame;
 pub use ws::WebSocket;
 
 mod frame;
 mod ws;
 
+#[derive(Copy, Clone)]
 pub enum Role {
   Server,
   Client { masking: bool },
 }
 
-pub enum Event<'a> {
-  Data(&'a [u8]),
-  Close { code: CloseCode, reason: String },
+pub enum Message<'a> {
+  Binary(&'a [u8]),
+  Close {
+    code: CloseCode,
+    reason: Option<&'a str>,
+  },
 }
 
 /// When closing an established connection an endpoint MAY indicate a reason for closure.
@@ -82,56 +85,5 @@ impl PartialEq<u16> for CloseCode {
   #[inline]
   fn eq(&self, other: &u16) -> bool {
     (*self as u16) == *other
-  }
-}
-
-/// This trait is responsible for encoding websocket closed frame.
-pub trait CloseReason {
-  /// Encoded close reason as bytes
-  type Bytes;
-  /// Encode websocket close frame.
-  fn to_bytes(self) -> Self::Bytes;
-}
-
-impl CloseReason for () {
-  type Bytes = [u8; 0];
-  fn to_bytes(self) -> Self::Bytes {
-    [0; 0]
-  }
-}
-
-impl CloseReason for u16 {
-  type Bytes = [u8; 2];
-  fn to_bytes(self) -> Self::Bytes {
-    self.to_be_bytes()
-  }
-}
-
-impl CloseReason for CloseCode {
-  type Bytes = [u8; 2];
-  fn to_bytes(self) -> Self::Bytes {
-    (self as u16).to_be_bytes()
-  }
-}
-
-impl CloseReason for &str {
-  type Bytes = Vec<u8>;
-  fn to_bytes(self) -> Self::Bytes {
-    CloseReason::to_bytes((CloseCode::Normal, self))
-  }
-}
-
-impl<Code, Msg> CloseReason for (Code, Msg)
-where
-  Code: Into<u16>,
-  Msg: AsRef<[u8]>,
-{
-  type Bytes = Vec<u8>;
-  fn to_bytes(self) -> Self::Bytes {
-    let (code, reason) = (self.0.into(), self.1.as_ref());
-    let mut data = Vec::with_capacity(2 + reason.len());
-    data.extend_from_slice(&code.to_be_bytes());
-    data.extend_from_slice(reason);
-    data
   }
 }

@@ -9,7 +9,6 @@ use clap::Parser;
 use hyper::service::{make_service_fn, Service};
 use hyper::upgrade::Upgraded;
 use hyper::{Body, Request, Response, Server, StatusCode};
-use tokio::io::split;
 use tokio::net::UdpSocket;
 use tokio::select;
 use tokio::signal::ctrl_c;
@@ -53,10 +52,9 @@ impl Future for FutA {
 
     tokio::spawn(async move {
       let ws = upgrade.await.unwrap().into_inner();
-      let (read, write) = split(ws);
 
-      let read = WebSocket::new(read, MAX_DATAGRAM_SIZE, Role::Server);
-      let write = WebSocket::new(write, MAX_DATAGRAM_SIZE, Role::Server);
+      let ws = WebSocket::new(ws, MAX_DATAGRAM_SIZE, Role::Server);
+      let (read, write) = ws.split();
 
       wread.push(ReadConnection::new(read)).await;
       wwrite.push(WriteConnection::new(write)).await;
