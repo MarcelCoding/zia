@@ -82,6 +82,9 @@ impl<W: AsyncWrite + Send + 'static> WritePool<W> {
       // .revc() in self.pool.acquire() would be blocking
       // until a connection becomes available, therefore
       // this would be appropriate
+      // - better would be an option to enable the blocking
+      // only on the server and on the client a `None`
+      // returned would open a new connection
       let mut conn = match conn {
         Some(conn) => conn,
         None => {
