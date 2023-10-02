@@ -4,6 +4,7 @@ use tokio::io::{split, AsyncRead, AsyncWrite, AsyncWriteExt, ReadHalf, WriteHalf
 use tokio::sync::RwLock;
 
 use crate::ws::frame::{Frame, OpCode};
+use crate::ws::WebsocketError::PayloadTooLarge;
 use crate::ws::{CloseCode, Message, Role, WebsocketError};
 
 pub struct WebSocket<IO> {
@@ -73,6 +74,10 @@ impl<W: Unpin + AsyncWrite> WebSocket<W> {
   }
 
   async fn send_frame(&mut self, frame: Frame<'_>) -> Result<(), WebsocketError> {
+    if frame.data.len() > self.max_payload_len {
+      return Err(PayloadTooLarge);
+    }
+
     match self.role {
       Role::Server => frame.write_without_mask(&mut self.io).await?,
       Role::Client { masking } => {
@@ -124,7 +129,7 @@ impl<R: Unpin + AsyncRead> WebSocket<R> {
       OpCode::Text => Err(WebsocketError::TextFramesAreNotSupported),
       OpCode::Binary => Ok(Message::Binary(frame.data)),
       OpCode::Close => Ok(parse_close_body(frame.data)?),
-      OpCode::Ping => Err( WebsocketError::PingFramesAreNotSupported),
+      OpCode::Ping => Err(WebsocketError::PingFramesAreNotSupported),
       OpCode::Pong => Err(WebsocketError::PongFramesAreNotSupported),
     }
   }
