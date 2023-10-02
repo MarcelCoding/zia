@@ -77,6 +77,11 @@ impl<W: AsyncWrite + Send + 'static> WritePool<W> {
     loop {
       let conn = self.pool.acquire().await;
 
+      // TODO:
+      // maybe just block until it is not empty anymore
+      // .revc() in self.pool.acquire() would be blocking
+      // until a connection becomes available, therefore
+      // this would be appropriate
       let mut conn = match conn {
         Some(conn) => conn,
         None => {
