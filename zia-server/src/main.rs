@@ -24,13 +24,13 @@ use crate::cfg::ServerCfg;
 mod cfg;
 
 #[pin_project::pin_project]
-struct FutA {
+struct HandleRequestFuture {
   req: Request<Body>,
   read: Arc<ReadPool>,
   write: Arc<WritePool<Upgraded>>,
 }
 
-impl Future for FutA {
+impl Future for HandleRequestFuture {
   type Output = Result<Response<Body>, Infallible>;
 
   fn poll(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
@@ -47,8 +47,8 @@ impl Future for FutA {
 
     let (resp, upgrade) = fastwebsockets::upgrade::upgrade(this.req).unwrap();
 
-    let wread = this.read.clone();
-    let wwrite = this.write.clone();
+    let read_pool = this.read.clone();
+    let write_pool = this.write.clone();
 
     tokio::spawn(async move {
       let ws = upgrade.await.unwrap().into_inner();
@@ -56,8 +56,8 @@ impl Future for FutA {
       let ws = WebSocket::new(ws, MAX_DATAGRAM_SIZE, Role::Server);
       let (read, write) = ws.split();
 
-      wread.push(ReadConnection::new(read)).await;
-      wwrite.push(WriteConnection::new(write)).await;
+      read_pool.push(ReadConnection::new(read)).await;
+      write_pool.push(WriteConnection::new(write)).await;
     });
 
     Poll::Ready(Ok(resp))
@@ -65,22 +65,22 @@ impl Future for FutA {
 }
 
 // mod app;
-struct Handler {
+struct ConnectionHandler {
   read: Arc<ReadPool>,
   write: Arc<WritePool<Upgraded>>,
 }
 
-impl Service<Request<Body>> for Handler {
+impl Service<Request<Body>> for ConnectionHandler {
   type Response = Response<Body>;
   type Error = Infallible;
-  type Future = FutA;
+  type Future = HandleRequestFuture;
 
   fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
     Poll::Ready(Ok(()))
   }
 
   fn call(&mut self, req: Request<Body>) -> Self::Future {
-    FutA {
+    HandleRequestFuture {
       req,
       read: self.read.clone(),
       write: self.write.clone(),
@@ -109,7 +109,7 @@ async fn main() -> anyhow::Result<()> {
     let read = rp.clone();
     let write = wp.clone();
 
-    async move { Ok::<_, Infallible>(Handler { read, write }) }
+    async move { Ok::<_, Infallible>(ConnectionHandler { read, write }) }
   });
 
   let server = Server::bind(&config.listen_addr).serve(make_service);

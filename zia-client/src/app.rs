@@ -89,7 +89,7 @@ pub(crate) async fn open_connection(
     }
   };
 
-  let stream = BufStream::new(stream);
+  let buffered_stream = BufStream::new(stream);
 
   let req = Request::get(upstream.to_string())
     .header(HOST, format!("{}:{}", upstream_host, upstream_port))
@@ -102,12 +102,12 @@ pub(crate) async fn open_connection(
 
   let (ws, _) = if upstream.scheme() == "wss" {
     let domain = ServerName::try_from(upstream_host)?;
-    let stream = TLS_CONNECTOR.connect(domain, stream).await?;
+    let tls_stream = TLS_CONNECTOR.connect(domain, buffered_stream).await?;
     info!("Upgraded to tls");
 
-    fastwebsockets::handshake::client(&SpawnExecutor, req, stream).await?
+    fastwebsockets::handshake::client(&SpawnExecutor, req, tls_stream).await?
   } else {
-    fastwebsockets::handshake::client(&SpawnExecutor, req, stream).await?
+    fastwebsockets::handshake::client(&SpawnExecutor, req, buffered_stream).await?
   };
 
   info!("Finished websocket handshake");

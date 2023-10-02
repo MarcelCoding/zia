@@ -56,7 +56,7 @@ impl ReadPool {
     }
   }
 
-  async fn wait(&self) -> Option<Result<anyhow::Result<()>, JoinError>> {
+  async fn wait_for_connections_to_close(&self) -> Option<Result<anyhow::Result<()>, JoinError>> {
     let mut set = self.tasks.lock().await;
     select! {
       result = set.join_next() => result,
@@ -67,7 +67,7 @@ impl ReadPool {
   pub async fn join(&self) -> anyhow::Result<()> {
     // hack
     loop {
-      while let Some(result) = self.wait().await {
+      while let Some(result) = self.wait_for_connections_to_close().await {
         if let Err(err) = result? {
           error!("Error while handling websocket frame: {}", err);
           // TODO: close and remove from write pool
