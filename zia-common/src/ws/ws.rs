@@ -1,11 +1,10 @@
 use std::sync::Arc;
 
-use anyhow::anyhow;
 use tokio::io::{split, AsyncRead, AsyncWrite, AsyncWriteExt, ReadHalf, WriteHalf};
 use tokio::sync::RwLock;
 
 use crate::ws::frame::{Frame, OpCode};
-use crate::ws::{CloseCode, Message, Role};
+use crate::ws::{CloseCode, Message, Role, WebsocketError};
 
 pub struct WebSocket<IO> {
   io: IO,
@@ -47,9 +46,9 @@ impl<IO: AsyncWrite + AsyncRead> WebSocket<IO> {
 }
 
 impl<W: Unpin + AsyncWrite> WebSocket<W> {
-  pub async fn send(&mut self, message: Message<'_>) -> anyhow::Result<()> {
+  pub async fn send(&mut self, message: Message<'_>) -> Result<(), WebsocketError> {
     if *self.closed.read().await {
-      return Err(anyhow!("connection closed"))?;
+      return Err(WebsocketError::NotConnected)?;
     }
 
     let res = match message {
@@ -73,7 +72,7 @@ impl<W: Unpin + AsyncWrite> WebSocket<W> {
     res
   }
 
-  async fn send_frame(&mut self, frame: Frame<'_>) -> anyhow::Result<()> {
+  async fn send_frame(&mut self, frame: Frame<'_>) -> Result<(), WebsocketError> {
     match self.role {
       Role::Server => frame.write_without_mask(&mut self.io).await?,
       Role::Client { masking } => {
@@ -91,16 +90,16 @@ impl<W: Unpin + AsyncWrite> WebSocket<W> {
     Ok(())
   }
 
-  pub async fn flush(&mut self) -> anyhow::Result<()> {
+  pub async fn flush(&mut self) -> Result<(), WebsocketError> {
     self.io.flush().await?;
     Ok(())
   }
 }
 
 impl<R: Unpin + AsyncRead> WebSocket<R> {
-  pub async fn recv<'a>(&mut self, buf: &'a mut [u8]) -> anyhow::Result<Message<'a>> {
+  pub async fn recv<'a>(&mut self, buf: &'a mut [u8]) -> Result<Message<'a>, WebsocketError> {
     if *self.closed.read().await {
-      return Err(anyhow!("connection closed"))?;
+      return Err(WebsocketError::NotConnected)?;
     }
 
     let event = self.recv_message(buf).await;
@@ -113,20 +112,20 @@ impl<R: Unpin + AsyncRead> WebSocket<R> {
     event
   }
 
-  async fn recv_message<'a>(&mut self, buf: &'a mut [u8]) -> anyhow::Result<Message<'a>> {
+  async fn recv_message<'a>(&mut self, buf: &'a mut [u8]) -> Result<Message<'a>, WebsocketError> {
     let frame = Frame::read(&mut self.io, buf, self.max_payload_len).await?;
 
     if !frame.fin {
-      return Err(anyhow!("framed messages are not supported"));
+      return Err(WebsocketError::FramedMessagesAreNotSupported);
     }
 
     match frame.opcode {
-      OpCode::Continuation => Err(anyhow!("framed messages are not supported")),
-      OpCode::Text => Err(anyhow!("text frames are not supported")),
+      OpCode::Continuation => Err(WebsocketError::FramedMessagesAreNotSupported),
+      OpCode::Text => Err(WebsocketError::TextFramesAreNotSupported),
       OpCode::Binary => Ok(Message::Binary(frame.data)),
       OpCode::Close => Ok(parse_close_body(frame.data)?),
-      OpCode::Ping => Err(anyhow!("ping frames are not supported")),
-      OpCode::Pong => Err(anyhow!("pong frames are not supported")),
+      OpCode::Ping => Err( WebsocketError::PingFramesAreNotSupported),
+      OpCode::Pong => Err(WebsocketError::PongFramesAreNotSupported),
     }
   }
 }
@@ -144,7 +143,7 @@ fn encode_close_body(code: CloseCode, reason: Option<&str>) -> Vec<u8> {
   }
 }
 
-fn parse_close_body(msg: &[u8]) -> anyhow::Result<Message> {
+fn parse_close_body(msg: &[u8]) -> Result<Message, WebsocketError> {
   let code = msg
     .get(..2)
     .map(|bytes| u16::from_be_bytes([bytes[0], bytes[1]]))
@@ -159,6 +158,6 @@ fn parse_close_body(msg: &[u8]) -> anyhow::Result<Message> {
         reason: msg,
       })
     }
-    _ => Err(anyhow!("invalid close code")),
+    code => Err(WebsocketError::InvalidCloseCode(code)),
   }
 }

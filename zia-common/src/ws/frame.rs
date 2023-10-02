@@ -1,5 +1,6 @@
-use anyhow::anyhow;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+
+use crate::ws::WebsocketError;
 
 #[repr(u8)]
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
@@ -13,7 +14,7 @@ pub(crate) enum OpCode {
 }
 
 impl TryFrom<u8> for OpCode {
-  type Error = anyhow::Error;
+  type Error = WebsocketError;
 
   fn try_from(value: u8) -> Result<Self, Self::Error> {
     match value {
@@ -23,7 +24,7 @@ impl TryFrom<u8> for OpCode {
       0x8 => Ok(Self::Close),
       0x9 => Ok(Self::Ping),
       0xA => Ok(Self::Pong),
-      value => Err(anyhow!("unimplemented opcode: {}", value)),
+      value => Err(WebsocketError::UnknownOpCode(value)),
     }
   }
 }
@@ -67,7 +68,7 @@ impl<'a> Frame<'a> {
     read: &mut R,
     buf: &'a mut [u8],
     max_payload_len: usize,
-  ) -> anyhow::Result<Frame<'a>> {
+  ) -> Result<Frame<'a>, WebsocketError> {
     let [b1, b2] = {
       let mut header = [0u8; 2];
       read.read_exact(&mut header).await?;
@@ -82,7 +83,7 @@ impl<'a> Frame<'a> {
     let masked = b2 & 0b_1000_0000 != 0;
 
     if rsv != 0 {
-      return Err(anyhow!("reserve bit must be `0`"));
+      return Err(WebsocketError::ReserveBitMustBeNull);
     }
 
     let len = match opcode {
@@ -93,13 +94,11 @@ impl<'a> Frame<'a> {
       },
       OpCode::Close | OpCode::Ping | OpCode::Pong => {
         if !fin {
-          return Err(anyhow!("control frame must not be fragmented"));
+          return Err(WebsocketError::ControlFrameMustNotBeFragmented);
         }
 
         if len > 125 {
-          return Err(anyhow!(
-            "control frame must have a payload length of 125 bytes or less"
-          ));
+          return Err(WebsocketError::ControlFrameMustHaveAPayloadLengthOf125BytesOrLess);
         }
 
         len
@@ -107,7 +106,7 @@ impl<'a> Frame<'a> {
     };
 
     if len > max_payload_len {
-      return Err(anyhow!("payload too large"));
+      return Err(WebsocketError::PayloadTooLarge);
     }
 
     read_payload(read, &mut buf[..len], masked).await?;
@@ -122,7 +121,7 @@ impl<'a> Frame<'a> {
   pub(crate) async fn write_without_mask<W: Unpin + AsyncWrite>(
     self,
     write: &mut W,
-  ) -> anyhow::Result<()> {
+  ) -> Result<(), WebsocketError> {
     self.write_header(write, 0).await?;
     write.write_all(self.data).await?;
 
@@ -133,7 +132,7 @@ impl<'a> Frame<'a> {
     self,
     write: &mut W,
     mask: [u8; 4],
-  ) -> anyhow::Result<()> {
+  ) -> Result<(), WebsocketError> {
     self.write_header(write, 0x80).await?;
     write.write_all(&mask).await?;
 
@@ -151,7 +150,7 @@ impl<'a> Frame<'a> {
     &self,
     write: &mut W,
     mask_bit: u8,
-  ) -> anyhow::Result<()> {
+  ) -> Result<(), WebsocketError> {
     write
       .write_u8(((self.fin as u8) << 7) | self.opcode as u8)
       .await?;
@@ -176,7 +175,7 @@ async fn read_payload<R: Unpin + AsyncRead>(
   read: &mut R,
   buf: &mut [u8],
   masked: bool,
-) -> anyhow::Result<()> {
+) -> Result<(), WebsocketError> {
   if masked {
     let mut mask = [0u8; 4];
     read.read_exact(&mut mask).await?;

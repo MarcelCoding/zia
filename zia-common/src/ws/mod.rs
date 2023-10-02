@@ -1,5 +1,7 @@
+pub use error::WebsocketError;
 pub use ws::WebSocket;
 
+mod error;
 mod frame;
 mod ws;
 
@@ -51,7 +53,7 @@ pub enum CloseCode {
   /// MUST NOT be set as a status code in a Close control frame by an endpoint.
   ///
   /// The connection was closed due to a failure to perform a TLS handshake.
-  TLSHandshake = 1015,
+  TlsHandshake = 1015,
 }
 
 impl From<CloseCode> for u16 {
@@ -75,15 +77,8 @@ impl From<u16> for CloseCode {
       1009 => CloseCode::MessageTooBig,
       1010 => CloseCode::MandatoryExt,
       1011 => CloseCode::InternalError,
-      1015 => CloseCode::TLSHandshake,
+      1015 => CloseCode::TlsHandshake,
       _ => CloseCode::PolicyViolation,
     }
-  }
-}
-
-impl PartialEq<u16> for CloseCode {
-  #[inline]
-  fn eq(&self, other: &u16) -> bool {
-    (*self as u16) == *other
   }
 }

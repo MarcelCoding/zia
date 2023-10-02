@@ -1155,6 +1155,7 @@ dependencies = [
  "anyhow",
  "hyper",
  "rand",
+ "thiserror",
  "tokio",
  "tracing",
 ]
