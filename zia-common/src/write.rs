@@ -1,13 +1,14 @@
 use std::net::SocketAddr;
 use std::sync::Arc;
+use std::time::Duration;
 
 use crate::{datagram_buffer, MAX_DATAGRAM_SIZE};
 use tokio::io::{AsyncWrite, WriteHalf};
 use tokio::net::UdpSocket;
 use tokio::sync::RwLock;
-use tracing::error;
+use tracing::{error, warn};
 
-use crate::pool::Pool;
+use crate::pool::{Pool, PoolEntry};
 use crate::ws::{Message, WebSocket};
 
 pub struct WriteConnection<W> {
@@ -30,6 +31,13 @@ impl<W: AsyncWrite> WriteConnection<W> {
     self.write.send(message).await?;
 
     Ok(())
+  }
+}
+
+impl<W> PoolEntry for WriteConnection<W> {
+  fn is_closed(&self) -> bool {
+    self.write.is_closed()
+    // TODO: open new connection on client - maybe fancy login in "abstract" pool
   }
 }
 
@@ -67,7 +75,20 @@ impl<W: AsyncWrite + Send + 'static> WritePool<W> {
 
   pub async fn execute(&self) -> anyhow::Result<()> {
     loop {
-      let mut conn = self.pool.acquire().await;
+      let conn = self.pool.acquire().await;
+
+      let mut conn = match conn {
+        Some(conn) => conn,
+        None => {
+          warn!("Write pool is empty, waiting 1s");
+          tokio::time::sleep(Duration::from_secs(1)).await;
+          continue;
+        }
+      };
+
+      if conn.is_closed() {
+        continue;
+      }
 
       // read from udp socket and save to buf of selected conn
       let (read, addr) = self.socket.recv_from(conn.buf.as_mut()).await.unwrap();

@@ -1,28 +1,36 @@
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use tokio::io::{split, AsyncRead, AsyncWrite, AsyncWriteExt, ReadHalf, WriteHalf};
-use tokio::sync::RwLock;
+use tracing::info;
 
 use crate::ws::frame::{Frame, OpCode};
-use crate::ws::WebsocketError::PayloadTooLarge;
 use crate::ws::{CloseCode, Message, Role, WebsocketError};
 
 pub struct WebSocket<IO> {
   io: IO,
   max_payload_len: usize,
   role: Role,
-  closed: Arc<RwLock<bool>>,
+  closed: Arc<AtomicBool>,
 }
 
 impl<IO> WebSocket<IO> {
   #[inline]
-  pub fn new(stream: IO, max_payload_len: usize, role: Role) -> Self {
+  pub fn new(io: IO, max_payload_len: usize, role: Role) -> Self {
     Self {
-      io: stream,
+      io,
       max_payload_len,
       role,
-      closed: Arc::new(RwLock::new(false)),
+      closed: Arc::new(AtomicBool::new(false)),
     }
+  }
+
+  pub fn is_closed(&self) -> bool {
+    self.closed.load(Ordering::Relaxed)
+  }
+
+  fn set_closed(&self) {
+    self.closed.store(true, Ordering::Relaxed)
   }
 }
 
@@ -48,7 +56,7 @@ impl<IO: AsyncWrite + AsyncRead> WebSocket<IO> {
 
 impl<W: Unpin + AsyncWrite> WebSocket<W> {
   pub async fn send(&mut self, message: Message<'_>) -> Result<(), WebsocketError> {
-    if *self.closed.read().await {
+    if self.is_closed() {
       return Err(WebsocketError::NotConnected)?;
     }
 
@@ -61,13 +69,15 @@ impl<W: Unpin + AsyncWrite> WebSocket<W> {
         let buf = encode_close_body(code, reason);
         let frame = Frame::new(true, OpCode::Close, &buf);
         let res = self.send_frame(frame).await;
-        *(self.closed.write().await) = true;
+        self.set_closed();
+        info!("Marking write channel as closed");
         res
       }
     };
 
     if res.is_err() {
-      *(self.closed.write().await) = true;
+      self.set_closed();
+      info!("Marking write channel as closed");
     }
 
     res
@@ -75,7 +85,7 @@ impl<W: Unpin + AsyncWrite> WebSocket<W> {
 
   async fn send_frame(&mut self, frame: Frame<'_>) -> Result<(), WebsocketError> {
     if frame.data.len() > self.max_payload_len {
-      return Err(PayloadTooLarge);
+      return Err(WebsocketError::PayloadTooLarge);
     }
 
     match self.role {
@@ -103,7 +113,7 @@ impl<W: Unpin + AsyncWrite> WebSocket<W> {
 
 impl<R: Unpin + AsyncRead> WebSocket<R> {
   pub async fn recv<'a>(&mut self, buf: &'a mut [u8]) -> Result<Message<'a>, WebsocketError> {
-    if *self.closed.read().await {
+    if self.is_closed() {
       return Err(WebsocketError::NotConnected)?;
     }
 
@@ -111,7 +121,8 @@ impl<R: Unpin + AsyncRead> WebSocket<R> {
 
     // set connection to closed
     if let Ok(Message::Close { .. }) | Err(..) = event {
-      *(self.closed.write().await) = true;
+      info!("marking read channel as closed");
+      self.set_closed();
     }
 
     event

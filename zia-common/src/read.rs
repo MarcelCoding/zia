@@ -2,14 +2,14 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
-use crate::datagram_buffer;
 use tokio::io::{AsyncRead, ReadHalf};
 use tokio::net::UdpSocket;
 use tokio::select;
 use tokio::sync::{Mutex, RwLock};
 use tokio::task::{JoinError, JoinSet};
-use tracing::error;
+use tracing::{error, warn};
 
+use crate::datagram_buffer;
 use crate::ws::{Message, WebSocket};
 
 pub struct ReadConnection<R> {
@@ -86,6 +86,11 @@ impl ReadPool {
     self.tasks.lock().await.spawn(async move {
       let mut buf = datagram_buffer();
       loop {
+        if conn.read.is_closed() {
+          warn!("Read connection closed");
+          // TODO: open new connection on client
+          return Ok(());
+        }
         conn.handle_frame(&socket, &addr, buf.as_mut()).await?;
       }
     });
