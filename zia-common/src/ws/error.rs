@@ -15,7 +15,7 @@ pub enum WebsocketError {
   ControlFrameMustHaveAPayloadLengthOf125BytesOrLess,
   #[error("payload too large")]
   PayloadTooLarge,
-  #[error("io error")]
+  #[error(transparent)]
   Io(#[from] io::Error),
   #[error("not connected")]
   NotConnected,
@@ -27,7 +27,7 @@ pub enum WebsocketError {
   PingFramesAreNotSupported,
   #[error("pong frames are not supported")]
   PongFramesAreNotSupported,
-  #[error("invalid utf8")]
+  #[error(transparent)]
   InvalidUtf8(#[from] Utf8Error),
   #[error("invalid close close `{0}`")]
   InvalidCloseCode(u16),
