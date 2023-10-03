@@ -59,7 +59,7 @@ impl<T: PoolEntry> Pool<T> {
 
   pub async fn acquire(&self) -> Option<PoolGuard<T>> {
     if self.size.load(Ordering::Relaxed) == 0 {
-      return None
+      return None;
     }
 
     let inner = self.rx.lock().await.recv().await.unwrap();

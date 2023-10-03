@@ -1,8 +1,9 @@
+use std::ops::Deref;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use tokio::io::{split, AsyncRead, AsyncWrite, AsyncWriteExt, ReadHalf, WriteHalf};
-use tracing::info;
+use tracing::{error, info};
 
 use crate::ws::frame::{Frame, OpCode};
 use crate::ws::{CloseCode, Message, Role, WebsocketError};
@@ -75,7 +76,18 @@ impl<W: Unpin + AsyncWrite> WebSocket<W> {
       }
     };
 
-    if res.is_err() {
+    // set stream as closed and send close frame, if error wan't a io error
+    if let Err(err) = &res {
+      match err {
+        WebsocketError::Io(_) => {}
+        _ => {
+          let buf = encode_close_body(CloseCode::InternalError, None);
+          let frame = Frame::new(true, OpCode::Close, &buf);
+          if let Err(err) = self.send_frame(frame).await {
+            error!("Failed to send close frame: {:?}", err);
+          }
+        }
+      }
       self.set_closed();
       info!("Marking write channel as closed");
     }
