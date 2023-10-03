@@ -11,8 +11,7 @@ graph LR
     C ---|UDP| D[Wireguard Server]
 ```
 
-The benefit is that Websocket uses Http. If you are in a restricted network where you can only access external services,
-and you can only use a provided Http proxy you can proxy your Wireguard Udp traffic over Websocket.
+The benefit is that Websocket uses Http. If you are in a restricted network where you can only access external services, and you can only use a provided Http proxy you can proxy your Wireguard Udp traffic over Websocket.
 
 ```mermaid
 graph LR
@@ -24,14 +23,12 @@ graph LR
 
 ## Mode
 
-| Name      | Description                                                                                                                                                                                                 |
-|-----------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| Websocket | The UDP datagrams are wrapped inside websocket frames. These frames are then transmitted to the server and there unwrapped.                                                                                 |
+| Name      | Description                                                                                                                                                                                                  |
+|-----------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Websocket | The UDP datagrams are wrapped inside websocket frames. These frames are then transmitted to the server and there unwrapped.                                                                                  |
 | TCP       | The UDP datagrams are prefixed with a 16 bit length of the datagram and then transmitted to the server in TCP packages. At the server these packages are unwrapped and forwarded to the actual UDP upstream. |
 
-The client is capable of doing a TLSv2 or TLSv3 handshake, the server isn't able to handle TLS requests. The client is also able to do a TLS
-handshake for a HTTPS proxy. In a case where an end to end (zia-client <-> zia-server) TLS
-encryption should happen, you have to proxy the traffic for the server using a reverse proxy.
+The client is capable of doing a TLSv2 or TLSv3 handshake, the server isn't able to handle TLS requests. In a case where an end to end (zia-client <-> zia-server) TLS encryption should happen, you have to proxy the traffic for the server using a reverse proxy.
 
 ## Client
 
