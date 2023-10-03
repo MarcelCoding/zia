@@ -1130,6 +1130,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ed94fce61571a4006852b7389a063ab983c02eb1bb37b47f8272ce92d06d9538"
 
 [[package]]
+name = "wsocket"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e9292da6c1a19221e1438774e8718db7163191c845f948b8b16675765396bdc7"
+dependencies = [
+ "rand",
+ "thiserror",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "zia-client"
 version = "0.0.0-git"
 dependencies = [
@@ -1145,6 +1157,7 @@ dependencies = [
  "tracing-subscriber",
  "url",
  "webpki-roots",
+ "wsocket",
  "zia-common",
 ]
 
@@ -1154,10 +1167,9 @@ version = "0.0.0-git"
 dependencies = [
  "anyhow",
  "hyper",
- "rand",
- "thiserror",
  "tokio",
  "tracing",
+ "wsocket",
 ]
 
 [[package]]
@@ -1174,5 +1186,6 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "webpki-roots",
+ "wsocket",
  "zia-common",
 ]

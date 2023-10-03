@@ -9,7 +9,6 @@ description = "Proxy udp over websocket, useful to use Wireguard in restricted n
 [dependencies]
 tokio = { version = "1.32", default-features = false, features = ["net", "sync"] }
 hyper = { version = "0.14", default-features = false, features = [] }
-rand = { version = "0.8", default-features = false }
-thiserror = "1.0"
+wsocket = "0.1"
 tracing = "0.1"
 anyhow = "1.0"

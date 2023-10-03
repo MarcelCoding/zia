@@ -13,6 +13,7 @@ async-http-proxy = { version = "1.2", default-features = false, features = ["run
 hyper = { version = "0.14", default-features = false, features = [] }
 tracing-subscriber = { version = "0.3", features = ["tracing-log"] }
 clap = { version = "4.4", features = ["derive", "env"] }
+wsocket = { version = "0.1", features = ["client"] }
 url = { version = "2.4", features = ["serde"] }
 webpki-roots = "0.25"
 tokio-rustls = "0.24"
@@ -24,5 +25,5 @@ zia-common = { path = '../zia-common' }
 
 [package.metadata.generate-rpm]
 assets = [
-    { source = "../LICENSE", dest = "/usr/share/doc/zia-client/LICENSE", doc = true, mode = "0644" },
+  { source = "../LICENSE", dest = "/usr/share/doc/zia-client/LICENSE", doc = true, mode = "0644" },
 ]

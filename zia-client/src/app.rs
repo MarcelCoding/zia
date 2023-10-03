@@ -15,8 +15,8 @@ use tokio_rustls::rustls::{ClientConfig, OwnedTrustAnchor, RootCertStore, Server
 use tokio_rustls::TlsConnector;
 use tracing::info;
 use url::Url;
+use wsocket::WebSocket;
 
-use zia_common::ws::{Role, WebSocket};
 use zia_common::{ReadConnection, WriteConnection, MAX_DATAGRAM_SIZE};
 
 static TLS_CONNECTOR: Lazy<TlsConnector> = Lazy::new(|| {
@@ -112,13 +112,7 @@ pub(crate) async fn open_connection(
 
   info!("Finished websocket handshake");
 
-  let ws = WebSocket::new(
-    ws.into_inner(),
-    MAX_DATAGRAM_SIZE,
-    Role::Client {
-      masking: websocket_masking,
-    },
-  );
+  let ws = WebSocket::client(ws.into_inner(), MAX_DATAGRAM_SIZE, websocket_masking);
 
   let (read, write) = ws.split();
 

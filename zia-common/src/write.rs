@@ -2,14 +2,14 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
-use crate::{datagram_buffer, MAX_DATAGRAM_SIZE};
 use tokio::io::{AsyncWrite, WriteHalf};
 use tokio::net::UdpSocket;
 use tokio::sync::RwLock;
 use tracing::{error, warn};
+use wsocket::{Message, WebSocket};
 
 use crate::pool::{Pool, PoolEntry};
-use crate::ws::{Message, WebSocket};
+use crate::{datagram_buffer, MAX_DATAGRAM_SIZE};
 
 pub struct WriteConnection<W> {
   write: WebSocket<WriteHalf<W>>,

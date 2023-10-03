@@ -15,8 +15,8 @@ use tokio::signal::ctrl_c;
 use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
 use tracing::info;
+use wsocket::WebSocket;
 
-use zia_common::ws::{Role, WebSocket};
 use zia_common::{ReadConnection, ReadPool, WriteConnection, WritePool, MAX_DATAGRAM_SIZE};
 
 use crate::cfg::ServerCfg;
@@ -53,7 +53,7 @@ impl Future for FutA {
     tokio::spawn(async move {
       let ws = upgrade.await.unwrap().into_inner();
 
-      let ws = WebSocket::new(ws, MAX_DATAGRAM_SIZE, Role::Server);
+      let ws = WebSocket::server(ws, MAX_DATAGRAM_SIZE);
       let (read, write) = ws.split();
 
       wread.push(ReadConnection::new(read)).await;

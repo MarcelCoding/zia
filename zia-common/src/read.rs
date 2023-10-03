@@ -8,9 +8,9 @@ use tokio::select;
 use tokio::sync::{Mutex, RwLock};
 use tokio::task::{JoinError, JoinSet};
 use tracing::{error, warn};
+use wsocket::{Message, WebSocket};
 
 use crate::datagram_buffer;
-use crate::ws::{Message, WebSocket};
 
 pub struct ReadConnection<R> {
   read: WebSocket<ReadHalf<R>>,
