@@ -1,19 +1,22 @@
-#![feature(entry_insert)]
-
 use std::net::SocketAddr;
-use clap::Parser;
+use std::sync::Arc;
 
+use clap::Parser;
 use tokio::net::UdpSocket;
 use tokio::select;
 use tokio::signal::ctrl_c;
+use tokio::sync::RwLock;
+use tokio::task::JoinSet;
 use tracing::info;
 use url::Url;
 
+use zia_common::{ReadPool, WritePool};
+
+use crate::app::open_connection;
 use crate::cfg::ClientCfg;
 
+mod app;
 mod cfg;
-mod handler;
-mod upstream;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -22,13 +25,13 @@ async fn main() -> anyhow::Result<()> {
   tracing_subscriber::fmt::init();
 
   select! {
-    result = tokio::spawn(listen(config.listen_addr, config.upstream, config.proxy)) => {
+    result = tokio::spawn(listen(config.listen_addr, config.upstream, config.proxy, config.count, config.websocket_masking)) => {
       result??;
       info!("Socket closed, quitting...");
     },
     result = shutdown_signal() => {
       result?;
-      info!("Termination signal received, quitting...")
+      info!("Termination signal received, quitting...");
     }
   }
 
@@ -62,19 +65,52 @@ async fn shutdown_signal() -> anyhow::Result<()> {
   }
 }
 
-async fn listen(addr: SocketAddr, upstream: Url, proxy: Option<Url>) -> anyhow::Result<()> {
-  let inbound = UdpSocket::bind(addr).await?;
-  info!("Listening on {}/udp", inbound.local_addr()?);
+async fn listen(
+  addr: SocketAddr,
+  upstream: Url,
+  proxy: Option<Url>,
+  connection_count: usize,
+  websocket_masking: bool,
+) -> anyhow::Result<()> {
+  let socket = Arc::new(UdpSocket::bind(addr).await?);
 
-  if let Some(proxy) = &proxy {
-    info!("Using upstream at {} via proxy {}...", upstream, proxy);
-  } else {
-    info!("Using upstream at {}...", upstream);
+  let upstream = Arc::new(upstream);
+  let proxy = Arc::new(proxy);
+
+  let mut conns = JoinSet::new();
+  for _ in 0..connection_count {
+    let upstream = upstream.clone();
+    let proxy = proxy.clone();
+    conns.spawn(async move { open_connection(&upstream, &proxy, websocket_masking).await });
   }
 
-  upstream::transmit(inbound, &upstream, &proxy).await?;
+  let addr = Arc::new(RwLock::new(Option::None));
 
-  info!("Transmission via {} closed", upstream);
+  let write_pool = WritePool::new(socket.clone(), addr.clone());
+  let read_pool = ReadPool::new(socket, addr);
 
-  Ok(())
+  while let Some(connection) = conns.join_next().await.transpose()? {
+    let (read, write) = connection?;
+    read_pool.push(read).await;
+    write_pool.push(write).await;
+  }
+
+  info!("Connected to upstream");
+
+  let write_handle = tokio::spawn(async move {
+    loop {
+      write_pool.execute().await?;
+    }
+  });
+
+  select! {
+    result = write_handle => {
+      info!("Write pool finished");
+      result?
+    },
+    result = read_pool.join() => {
+      info!("Read pool finished");
+      result
+    },
+  }
 }

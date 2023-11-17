@@ -7,20 +7,23 @@ license = "AGPL-3.0"
 description = "Proxy udp over websocket, useful to use Wireguard in restricted networks."
 
 [dependencies]
-tokio = { version = "1.32", default-features = false, features = ["macros", "net", "rt-multi-thread", "signal", "sync"] }
+fastwebsockets = { git = "https://github.com/MarcelCoding/fastwebsockets", branch = "split", default-features = false, features = ["upgrade"] }
+tokio = { version = "1.34", default-features = false, features = ["rt-multi-thread", "macros", "net", "sync", "time", "signal"] }
+async-http-proxy = { version = "1.2", default-features = false, features = ["runtime-tokio", "basic-auth"] }
+hyper = { version = "0.14", default-features = false, features = [] }
 tracing-subscriber = { version = "0.3", features = ["tracing-log"] }
-tokio-tungstenite = { version = "0.20", default-features = false, features = ["handshake"] }
-futures-util = { version = "0.3", default-features = false }
 clap = { version = "4.4", features = ["derive", "env"] }
+wsocket = { version = "0.1", features = ["client"] }
 url = { version = "2.4", features = ["serde"] }
-async-trait = "0.1"
+webpki-roots = "0.25"
+tokio-rustls = "0.24"
+once_cell = "1.18"
 tracing = "0.1"
 anyhow = "1.0"
 
-zia-common = { path = "../zia-common" }
+zia-common = { path = '../zia-common' }
 
 [package.metadata.generate-rpm]
 assets = [
-    #    { source = "target/release/status-node", dest = "/usr/bin/status-node", mode = "0755" },
-    { source = "../LICENSE", dest = "/usr/share/doc/zia-client/LICENSE", doc = true, mode = "0644" },
+  { source = "../LICENSE", dest = "/usr/share/doc/zia-client/LICENSE", doc = true, mode = "0644" },
 ]
