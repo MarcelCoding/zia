@@ -8,7 +8,7 @@ description = "Proxy udp over websocket, useful to use Wireguard in restricted n
 
 [dependencies]
 fastwebsockets = { git = "https://github.com/MarcelCoding/fastwebsockets", branch = "split", default-features = false, features = ["upgrade"] }
-tokio = { version = "1.32", default-features = false, features = ["rt-multi-thread", "macros", "net", "sync", "time", "signal"] }
+tokio = { version = "1.34", default-features = false, features = ["rt-multi-thread", "macros", "net", "sync", "time", "signal"] }
 async-http-proxy = { version = "1.2", default-features = false, features = ["runtime-tokio", "basic-auth"] }
 hyper = { version = "0.14", default-features = false, features = [] }
 tracing-subscriber = { version = "0.3", features = ["tracing-log"] }

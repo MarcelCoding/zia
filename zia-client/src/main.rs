@@ -81,7 +81,6 @@ async fn listen(
   for _ in 0..connection_count {
     let upstream = upstream.clone();
     let proxy = proxy.clone();
-    let websocket_masking = websocket_masking;
     conns.spawn(async move { open_connection(&upstream, &proxy, websocket_masking).await });
   }
 

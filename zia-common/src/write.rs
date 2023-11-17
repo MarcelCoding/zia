@@ -79,7 +79,7 @@ impl<W: AsyncWrite + Send + 'static> WritePool<W> {
 
       // TODO:
       // maybe just block until it is not empty anymore
-      // .revc() in self.pool.acquire() would be blocking
+      // .revc() in self.pool.acquire() would be "blocking" (asynchronous)
       // until a connection becomes available, therefore
       // this would be appropriate
       // - better would be an option to enable the blocking

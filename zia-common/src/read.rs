@@ -27,14 +27,14 @@ impl<R: AsyncRead> ReadConnection<R> {
     addr: &RwLock<Option<SocketAddr>>,
     buf: &mut [u8],
   ) -> anyhow::Result<()> {
-    let event = self.read.recv(buf).await?;
+    let message = self.read.recv(buf).await?;
 
-    match event {
+    match message {
       Message::Binary(data) => {
         let addr = addr.read().await.unwrap();
         socket.send_to(data, addr).await?;
       }
-      Message::Close { .. } => {}
+      _ => unimplemented!(),
     }
 
     Ok(())
