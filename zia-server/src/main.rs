@@ -47,8 +47,8 @@ impl Future for HandleRequestFuture {
 
     let (resp, upgrade) = fastwebsockets::upgrade::upgrade(this.req).unwrap();
 
-    let wread = this.read.clone();
-    let wwrite = this.write.clone();
+    let cloned_read = this.read.clone();
+    let cloned_write = this.write.clone();
 
     tokio::spawn(async move {
       let ws = upgrade.await.unwrap().into_inner();
@@ -56,8 +56,8 @@ impl Future for HandleRequestFuture {
       let ws = WebSocket::server(ws, MAX_DATAGRAM_SIZE);
       let (read, write) = ws.split();
 
-      wread.push(ReadConnection::new(read)).await;
-      wwrite.push(WriteConnection::new(write)).await;
+      cloned_read.push(ReadConnection::new(read)).await;
+      cloned_write.push(WriteConnection::new(write)).await;
     });
 
     Poll::Ready(Ok(resp))
