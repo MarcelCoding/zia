@@ -2,7 +2,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
-use tokio::io::{AsyncRead, ReadHalf};
+use tokio::io::AsyncRead;
 use tokio::net::UdpSocket;
 use tokio::select;
 use tokio::sync::{Mutex, RwLock};
@@ -13,11 +13,11 @@ use wsocket::{Message, WebSocket};
 use crate::datagram_buffer;
 
 pub struct ReadConnection<R> {
-  read: WebSocket<ReadHalf<R>>,
+  read: WebSocket<R>,
 }
 
-impl<R: AsyncRead> ReadConnection<R> {
-  pub fn new(read: WebSocket<ReadHalf<R>>) -> Self {
+impl<R: AsyncRead + Unpin> ReadConnection<R> {
+  pub fn new(read: WebSocket<R>) -> Self {
     Self { read }
   }
 
@@ -79,7 +79,7 @@ impl ReadPool {
     }
   }
 
-  pub async fn push<R: AsyncRead + Send + 'static>(&self, mut conn: ReadConnection<R>) {
+  pub async fn push<R: AsyncRead + Unpin + Send + 'static>(&self, mut conn: ReadConnection<R>) {
     let socket = self.socket.clone();
     let addr = self.addr.clone();
 

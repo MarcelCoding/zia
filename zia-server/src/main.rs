@@ -6,16 +6,21 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 
 use clap::Parser;
-use hyper::service::{make_service_fn, Service};
+use http_body_util::Full;
+use hyper::body::{Bytes, Incoming};
+use hyper::service::Service;
 use hyper::upgrade::Upgraded;
-use hyper::{Body, Request, Response, Server, StatusCode};
-use tokio::net::UdpSocket;
+use hyper::{Request, Response, StatusCode};
+use hyper_util::rt::TokioIo;
+use pin_project_lite::pin_project;
+use tokio::io::WriteHalf;
+use tokio::net::{TcpListener, UdpSocket};
 use tokio::select;
 use tokio::signal::ctrl_c;
 use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
-use tracing::info;
-use wsocket::WebSocket;
+use tracing::{error, info};
+use wsocket::{is_upgrade_request, upgrade};
 
 use zia_common::{ReadConnection, ReadPool, WriteConnection, WritePool, MAX_DATAGRAM_SIZE};
 
@@ -23,37 +28,46 @@ use crate::cfg::ServerCfg;
 
 mod cfg;
 
-#[pin_project::pin_project]
-struct HandleRequestFuture {
-  req: Request<Body>,
-  read: Arc<ReadPool>,
-  write: Arc<WritePool<Upgraded>>,
+pin_project! {
+  struct HandleRequestFuture {
+    req: Request<Incoming>,
+    read: Arc<ReadPool>,
+    write: Arc<WritePool<WriteHalf<TokioIo<Upgraded>>>>,
+  }
 }
 
 impl Future for HandleRequestFuture {
-  type Output = Result<Response<Body>, Infallible>;
+  type Output = Result<Response<Full<Bytes>>, Infallible>;
 
   fn poll(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
     let this = self.project();
 
-    if !fastwebsockets::upgrade::is_upgrade_request(this.req) {
+    if !is_upgrade_request(this.req) {
       return Poll::Ready(Ok(
         Response::builder()
           .status(StatusCode::BAD_REQUEST)
-          .body(Body::from("bad request: expected websocket upgrade"))
+          .body(Full::new(Bytes::from(
+            "bad request: expected websocket upgrade",
+          )))
           .unwrap(),
       ));
     }
 
-    let (resp, upgrade) = fastwebsockets::upgrade::upgrade(this.req).unwrap();
+    let (resp, upgrade) = match upgrade(this.req, MAX_DATAGRAM_SIZE) {
+      Ok(res) => res,
+      Err(err) => {
+        error!("Error: {:?}", err);
+        let mut resp = Response::new(Full::new(Bytes::from("bad request")));
+        *resp.status_mut() = StatusCode::BAD_REQUEST;
+        return Poll::Ready(Ok(resp));
+      }
+    };
 
     let cloned_read = this.read.clone();
     let cloned_write = this.write.clone();
 
     tokio::spawn(async move {
-      let ws = upgrade.await.unwrap().into_inner();
-
-      let ws = WebSocket::server(ws, MAX_DATAGRAM_SIZE);
+      let ws = upgrade.await.unwrap();
       let (read, write) = ws.split();
 
       cloned_read.push(ReadConnection::new(read)).await;
@@ -67,19 +81,15 @@ impl Future for HandleRequestFuture {
 // mod app;
 struct ConnectionHandler {
   read: Arc<ReadPool>,
-  write: Arc<WritePool<Upgraded>>,
+  write: Arc<WritePool<WriteHalf<TokioIo<Upgraded>>>>,
 }
 
-impl Service<Request<Body>> for ConnectionHandler {
-  type Response = Response<Body>;
+impl Service<Request<Incoming>> for ConnectionHandler {
+  type Response = Response<Full<Bytes>>;
   type Error = Infallible;
   type Future = HandleRequestFuture;
 
-  fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-    Poll::Ready(Ok(()))
-  }
-
-  fn call(&mut self, req: Request<Body>) -> Self::Future {
+  fn call(&self, req: Request<Incoming>) -> Self::Future {
     HandleRequestFuture {
       req,
       read: self.read.clone(),
@@ -105,16 +115,30 @@ async fn main() -> anyhow::Result<()> {
   let wp = write_pool.clone();
   let rp = read_pool.clone();
 
-  let make_service = make_service_fn(|_conn| {
-    let read = rp.clone();
-    let write = wp.clone();
-
-    async move { Ok::<_, Infallible>(ConnectionHandler { read, write }) }
-  });
-
-  let server = Server::bind(&config.listen_addr).serve(make_service);
+  let server = TcpListener::bind(&config.listen_addr).await?;
 
   info!("Listening on {}://{}...", config.mode, config.listen_addr);
+
+  let server = tokio::spawn(async move {
+    loop {
+      let (stream, _) = server.accept().await.unwrap();
+
+      let io = TokioIo::new(stream);
+
+      let read = rp.clone();
+      let write = wp.clone();
+
+      let service = ConnectionHandler { read, write };
+
+      let conn = hyper::server::conn::http1::Builder::new().serve_connection(io, service);
+
+      tokio::spawn(async move {
+        if let Err(err) = conn.await {
+          error!("Error: {:?}", err);
+        }
+      });
+    }
+  });
 
   let write_handle: JoinHandle<anyhow::Result<()>> = tokio::spawn(async move {
     loop {

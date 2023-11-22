@@ -3,19 +3,16 @@ use std::sync::Arc;
 
 use anyhow::anyhow;
 use async_http_proxy::{http_connect_tokio, http_connect_tokio_with_basic_auth};
-use hyper::header::{
-  CONNECTION, HOST, SEC_WEBSOCKET_KEY, SEC_WEBSOCKET_VERSION, UPGRADE, USER_AGENT,
-};
 use hyper::upgrade::Upgraded;
-use hyper::{Body, Request};
+use hyper_util::rt::TokioIo;
 use once_cell::sync::Lazy;
-use tokio::io::BufStream;
+use tokio::io::{BufStream, ReadHalf, WriteHalf};
 use tokio::net::TcpStream;
 use tokio_rustls::rustls::{ClientConfig, OwnedTrustAnchor, RootCertStore, ServerName};
 use tokio_rustls::TlsConnector;
 use tracing::info;
 use url::Url;
-use wsocket::WebSocket;
+use wsocket::handshake;
 
 use zia_common::{ReadConnection, WriteConnection, MAX_DATAGRAM_SIZE};
 
@@ -37,7 +34,10 @@ pub(crate) async fn open_connection(
   upstream: &Url,
   proxy: &Option<Url>,
   websocket_masking: bool,
-) -> anyhow::Result<(ReadConnection<Upgraded>, WriteConnection<Upgraded>)> {
+) -> anyhow::Result<(
+  ReadConnection<ReadHalf<TokioIo<Upgraded>>>,
+  WriteConnection<WriteHalf<TokioIo<Upgraded>>>,
+)> {
   let upstream_host = upstream
     .host_str()
     .ok_or_else(|| anyhow!("Upstream url is missing host"))?;
@@ -91,28 +91,35 @@ pub(crate) async fn open_connection(
 
   let stream = BufStream::new(stream);
 
-  let req = Request::get(upstream.to_string())
-    .header(HOST, format!("{}:{}", upstream_host, upstream_port))
-    .header(UPGRADE, "websocket")
-    .header(CONNECTION, "upgrade")
-    .header(SEC_WEBSOCKET_KEY, fastwebsockets::handshake::generate_key())
-    .header(SEC_WEBSOCKET_VERSION, "13")
-    .header(USER_AGENT, "zia")
-    .body(Body::empty())?;
-
   let (ws, _) = if upstream.scheme() == "wss" {
     let domain = ServerName::try_from(upstream_host)?;
     let stream = TLS_CONNECTOR.connect(domain, stream).await?;
     info!("Upgraded to tls");
 
-    fastwebsockets::handshake::client(&SpawnExecutor, req, stream).await?
+    handshake(
+      &upstream.to_string().parse().unwrap(),
+      upstream_host,
+      upstream_port,
+      "zia",
+      stream,
+      MAX_DATAGRAM_SIZE,
+      websocket_masking,
+    )
+    .await?
   } else {
-    fastwebsockets::handshake::client(&SpawnExecutor, req, stream).await?
+    handshake(
+      &upstream.to_string().parse().unwrap(),
+      upstream_host,
+      upstream_port,
+      "zia",
+      stream,
+      MAX_DATAGRAM_SIZE,
+      websocket_masking,
+    )
+    .await?
   };
 
   info!("Finished websocket handshake");
-
-  let ws = WebSocket::client(ws.into_inner(), MAX_DATAGRAM_SIZE, websocket_masking);
 
   let (read, write) = ws.split();
 

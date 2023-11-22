@@ -2,7 +2,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
-use tokio::io::{AsyncWrite, WriteHalf};
+use tokio::io::AsyncWrite;
 use tokio::net::UdpSocket;
 use tokio::sync::RwLock;
 use tracing::{error, warn};
@@ -12,12 +12,12 @@ use crate::pool::{Pool, PoolEntry};
 use crate::{datagram_buffer, MAX_DATAGRAM_SIZE};
 
 pub struct WriteConnection<W> {
-  write: WebSocket<WriteHalf<W>>,
+  write: WebSocket<W>,
   buf: Box<[u8; MAX_DATAGRAM_SIZE]>,
 }
 
-impl<W: AsyncWrite> WriteConnection<W> {
-  pub fn new(write: WebSocket<WriteHalf<W>>) -> Self {
+impl<W: AsyncWrite + Unpin> WriteConnection<W> {
+  pub fn new(write: WebSocket<W>) -> Self {
     Self {
       buf: datagram_buffer(),
       write,
@@ -47,7 +47,7 @@ pub struct WritePool<W> {
   addr: Arc<RwLock<Option<SocketAddr>>>,
 }
 
-impl<W: AsyncWrite + Send + 'static> WritePool<W> {
+impl<W: AsyncWrite + Unpin + Send + 'static> WritePool<W> {
   pub fn new(socket: Arc<UdpSocket>, addr: Arc<RwLock<Option<SocketAddr>>>) -> Self {
     Self {
       socket,
