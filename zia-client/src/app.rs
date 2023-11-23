@@ -97,22 +97,22 @@ pub(crate) async fn open_connection(
     info!("Upgraded to tls");
 
     handshake(
+      stream,
       &upstream.to_string().parse().unwrap(),
       upstream_host,
       upstream_port,
       "zia",
-      stream,
       MAX_DATAGRAM_SIZE,
       websocket_masking,
     )
     .await?
   } else {
     handshake(
+      stream,
       &upstream.to_string().parse().unwrap(),
       upstream_host,
       upstream_port,
       "zia",
-      stream,
       MAX_DATAGRAM_SIZE,
       websocket_masking,
     )
