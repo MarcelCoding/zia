@@ -11,6 +11,7 @@ use hyper::body::{Bytes, Incoming};
 use hyper::service::Service;
 use hyper::upgrade::Upgraded;
 use hyper::{Request, Response, StatusCode};
+use hyper::server::conn::http1;
 use hyper_util::rt::TokioIo;
 use pin_project_lite::pin_project;
 use tokio::io::WriteHalf;
@@ -134,10 +135,10 @@ async fn main() -> anyhow::Result<()> {
 
       let service = ConnectionHandler { read, write };
 
-      let conn = hyper::server::conn::http1::Builder::new().serve_connection(io, service);
+      let conn = http1::Builder::new().serve_connection(io, service);
 
       tokio::spawn(async move {
-        if let Err(err) = conn.await {
+        if let Err(err) = conn.with_upgrades().await {
           error!("Error: {:?}", err);
         }
       });
