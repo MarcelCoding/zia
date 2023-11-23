@@ -67,11 +67,15 @@ impl Future for HandleRequestFuture {
     let cloned_write = this.write.clone();
 
     tokio::spawn(async move {
-      let ws = upgrade.await.unwrap();
-      let (read, write) = ws.split();
+      match upgrade.await {
+        Ok(ws) => {
+          let (read, write) = ws.split();
 
-      cloned_read.push(ReadConnection::new(read)).await;
-      cloned_write.push(WriteConnection::new(write)).await;
+          cloned_read.push(ReadConnection::new(read)).await;
+          cloned_write.push(WriteConnection::new(write)).await;
+        }
+        Err(err) => error!("Error while upgrading connection: {:?}", err),
+      }
     });
 
     Poll::Ready(Ok(resp))
