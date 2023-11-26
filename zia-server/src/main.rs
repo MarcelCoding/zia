@@ -20,7 +20,8 @@ use tokio::select;
 use tokio::signal::ctrl_c;
 use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
-use tracing::{error, info};
+use tracing::{error, info, Level};
+use tracing_subscriber::FmtSubscriber;
 use wsocket::{is_upgrade_request, upgrade};
 
 use zia_common::{ReadConnection, ReadPool, WriteConnection, WritePool, MAX_DATAGRAM_SIZE};
@@ -107,7 +108,20 @@ impl Service<Request<Incoming>> for ConnectionHandler {
 async fn main() -> anyhow::Result<()> {
   let config = ServerCfg::parse();
 
-  tracing_subscriber::fmt::init();
+  let subscriber = FmtSubscriber::builder()
+    .with_max_level(Level::INFO)
+    .compact()
+    .finish();
+
+  tracing::subscriber::set_global_default(subscriber)?;
+
+  info!(concat!(
+    "Booting ",
+    env!("CARGO_PKG_NAME"),
+    "/",
+    env!("CARGO_PKG_VERSION"),
+    "..."
+  ));
 
   let socket = Arc::new(UdpSocket::bind(Into::<SocketAddr>::into(([0, 0, 0, 0], 0))).await?);
   socket.connect(&config.upstream).await?;

@@ -7,7 +7,8 @@ use tokio::select;
 use tokio::signal::ctrl_c;
 use tokio::sync::RwLock;
 use tokio::task::JoinSet;
-use tracing::info;
+use tracing::{info, Level};
+use tracing_subscriber::FmtSubscriber;
 use url::Url;
 
 use zia_common::{ReadPool, WritePool};
@@ -22,7 +23,20 @@ mod cfg;
 async fn main() -> anyhow::Result<()> {
   let config = ClientCfg::parse();
 
-  tracing_subscriber::fmt::init();
+  let subscriber = FmtSubscriber::builder()
+    .with_max_level(Level::INFO)
+    .compact()
+    .finish();
+
+  tracing::subscriber::set_global_default(subscriber)?;
+
+  info!(concat!(
+    "Booting ",
+    env!("CARGO_PKG_NAME"),
+    "/",
+    env!("CARGO_PKG_VERSION"),
+    "..."
+  ));
 
   select! {
     result = tokio::spawn(listen(config.listen_addr, config.upstream, config.proxy, config.count, config.websocket_masking)) => {

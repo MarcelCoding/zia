@@ -7,32 +7,27 @@ license = "AGPL-3.0"
 description = "Proxy udp over websocket, useful to use Wireguard in restricted networks."
 
 [dependencies]
-tokio = { version = "1.34", default-features = false, features = ["rt-multi-thread", "macros", "net","sync", "time", "signal"] }
+clap = { version = "4.4", default-features = false, features = ["std", "color", "help", "usage", "error-context", "suggestions", "derive", "env"] }
+tokio = { version = "1.34", default-features = false, features = ["macros", "rt-multi-thread", "signal", "io-util"] }
+tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "ansi"] }
+tracing = { version = "0.1", default-features = false, features = ["release_max_level_info"] }
+wsocket = { version = "0.2", default-features = false, features = ["upgrade"] }
 hyper = { version = "1.0", default-features = false, features = ["server", "http1"] }
-tracing-subscriber = { version = "0.3", features = ["tracing-log"] }
-clap = { version = "4.4", features = ["derive", "env"] }
-wsocket = { git = "https://github.com/MarcelCoding/wsocket" , features = ["upgrade"]}
-hyper-util = { version ="0.1" , features = ["tokio"]}
-pin-project-lite = "0.2"
-http-body-util = "0.1"
-webpki-roots = "0.25"
-pin-project = "1.1"
-once_cell = "1.18"
-tracing = "0.1"
-anyhow = "1.0"
-
-zia-common = { path = '../zia-common' }
-bytes = "1.5.0"
+hyper-util = { version = "0.1", default-features = false, features = ["tokio"] }
+pin-project-lite = { version = "0.2", default-features = false }
+http-body-util = { version = "0.1", default-features = false }
+zia-common = { path = '../zia-common', default-features = false }
+anyhow = { version = "1.0", default-features = false }
 
 [package.metadata.deb]
 maintainer-scripts = "debian/"
 systemd-units = { enable = false }
 assets = [
-    ["target/release/zia-server", "/usr/bin/zia-server", "755"],
-    ["debian/default", "/etc/default/zia-server", "644"]
+  ["target/release/zia-server", "/usr/bin/zia-server", "755"],
+  ["debian/default", "/etc/default/zia-server", "644"]
 ]
 
 [package.metadata.generate-rpm]
 assets = [
-    { source = "../LICENSE", dest = "/usr/share/doc/zia-server/LICENSE", doc = true, mode = "0644" },
+  { source = "../LICENSE", dest = "/usr/share/doc/zia-server/LICENSE", doc = true, mode = "0644" },
 ]
