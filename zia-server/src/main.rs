@@ -19,7 +19,6 @@ use tokio::net::{TcpListener, UdpSocket};
 use tokio::select;
 use tokio::signal::ctrl_c;
 use tokio::sync::RwLock;
-use tokio::task::JoinHandle;
 use tracing::{error, info, Level};
 use tracing_subscriber::FmtSubscriber;
 use wsocket::{is_upgrade_request, upgrade};
@@ -73,7 +72,7 @@ impl Future for HandleRequestFuture {
         Ok(ws) => {
           let (read, write) = ws.split();
 
-          cloned_read.push(ReadConnection::new(read)).await;
+          cloned_read.push(ReadConnection::new(read), None).await;
           cloned_write.push(WriteConnection::new(write)).await;
         }
         Err(err) => error!("Error while upgrading connection: {:?}", err),
@@ -159,25 +158,13 @@ async fn main() -> anyhow::Result<()> {
     }
   });
 
-  let write_handle: JoinHandle<anyhow::Result<()>> = tokio::spawn(async move {
-    loop {
-      write_pool.execute().await?;
-    }
-  });
-
   select! {
     result = server => {
       info!("Socket closed, quitting...");
       result?;
     },
-      result = write_handle => {
-      info!("Write pool finished");
-      result??;
-    },
-    result = read_pool.join() => {
-      info!("Read pool finished");
-      result?;
-    },
+    _ = write_pool.join() => info!("Write pool finished"),
+    _ = read_pool.join() => info!("Read pool finished"),
     result = shutdown_signal() => {
       info!("Termination signal received, quitting...");
       result?;

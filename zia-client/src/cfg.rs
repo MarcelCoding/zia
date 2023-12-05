@@ -14,11 +14,6 @@ pub(crate) struct ClientCfg {
   pub(crate) proxy: Option<Url>,
   #[arg(short, long, env = "ZIA_COUNT")]
   pub(crate) count: usize,
-  #[arg(
-    short = 'm',
-    long,
-    env = "ZIA_WEBSOCKET_MASKING",
-    default_value = "false"
-  )]
-  pub(crate) websocket_masking: bool,
+  #[arg(short = 'm', long, env = "ZIA_WS_MASKING", default_value = "false")]
+  pub(crate) ws_masking: bool,
 }

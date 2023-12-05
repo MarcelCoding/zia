@@ -73,7 +73,7 @@ impl<W: AsyncWrite + Unpin + Send + 'static> WritePool<W> {
     self.pool.push(conn);
   }
 
-  pub async fn execute(&self) -> anyhow::Result<()> {
+  pub async fn join(&self) {
     loop {
       let conn = self.pool.acquire().await;
 

@@ -5,7 +5,7 @@ use std::time::Duration;
 use tokio::io::AsyncRead;
 use tokio::net::UdpSocket;
 use tokio::select;
-use tokio::sync::{Mutex, RwLock};
+use tokio::sync::{mpsc, Mutex, RwLock};
 use tokio::task::{JoinError, JoinSet};
 use tracing::{error, warn};
 use wsocket::{Message, WebSocket};
@@ -79,7 +79,11 @@ impl ReadPool {
     }
   }
 
-  pub async fn push<R: AsyncRead + Unpin + Send + 'static>(&self, mut conn: ReadConnection<R>) {
+  pub async fn push<R: AsyncRead + Unpin + Send + 'static>(
+    &self,
+    mut conn: ReadConnection<R>,
+    dead_conn: Option<mpsc::Sender<()>>,
+  ) {
     let socket = self.socket.clone();
     let addr = self.addr.clone();
 
@@ -89,6 +93,9 @@ impl ReadPool {
         if conn.read.is_closed() {
           warn!("Read connection closed");
           // TODO: open new connection on client
+          if let Some(dead_conn) = dead_conn {
+            dead_conn.send(()).await?;
+          }
           return Ok(());
         }
         conn.handle_frame(&socket, &addr, buf.as_mut()).await?;

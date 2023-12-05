@@ -1,23 +1,15 @@
-use std::net::SocketAddr;
-use std::sync::Arc;
-
 use clap::Parser;
 use tokio::net::UdpSocket;
 use tokio::select;
 use tokio::signal::ctrl_c;
-use tokio::sync::RwLock;
-use tokio::task::JoinSet;
 use tracing::{info, Level};
 use tracing_subscriber::FmtSubscriber;
-use url::Url;
 
-use zia_common::{ReadPool, WritePool};
-
-use crate::app::open_connection;
 use crate::cfg::ClientCfg;
+use crate::handler::Handler;
 
-mod app;
 mod cfg;
+mod handler;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -38,9 +30,14 @@ async fn main() -> anyhow::Result<()> {
     "..."
   ));
 
+  let socket = UdpSocket::bind(config.listen_addr).await?;
+  info!("Listening on {}/udp...", config.listen_addr);
+
+  let handler = Handler::new(socket, config.upstream, config.proxy, config.ws_masking)?;
+
   select! {
-    result = tokio::spawn(listen(config.listen_addr, config.upstream, config.proxy, config.count, config.websocket_masking)) => {
-      result??;
+    result = handler.run(config.count) => {
+      result?;
       info!("Socket closed, quitting...");
     },
     result = shutdown_signal() => {
@@ -76,55 +73,5 @@ async fn shutdown_signal() -> anyhow::Result<()> {
   {
     ctrl_c.await;
     Ok(())
-  }
-}
-
-async fn listen(
-  addr: SocketAddr,
-  upstream: Url,
-  proxy: Option<Url>,
-  connection_count: usize,
-  websocket_masking: bool,
-) -> anyhow::Result<()> {
-  let socket = Arc::new(UdpSocket::bind(addr).await?);
-
-  let upstream = Arc::new(upstream);
-  let proxy = Arc::new(proxy);
-
-  let mut conns = JoinSet::new();
-  for _ in 0..connection_count {
-    let upstream = upstream.clone();
-    let proxy = proxy.clone();
-    conns.spawn(async move { open_connection(&upstream, &proxy, websocket_masking).await });
-  }
-
-  let addr = Arc::new(RwLock::new(Option::None));
-
-  let write_pool = WritePool::new(socket.clone(), addr.clone());
-  let read_pool = ReadPool::new(socket, addr);
-
-  while let Some(connection) = conns.join_next().await.transpose()? {
-    let (read, write) = connection?;
-    read_pool.push(read).await;
-    write_pool.push(write).await;
-  }
-
-  info!("Connected to upstream");
-
-  let write_handle = tokio::spawn(async move {
-    loop {
-      write_pool.execute().await?;
-    }
-  });
-
-  select! {
-    result = write_handle => {
-      info!("Write pool finished");
-      result?
-    },
-    result = read_pool.join() => {
-      info!("Read pool finished");
-      result
-    },
   }
 }
