@@ -72,7 +72,7 @@ impl Future for HandleRequestFuture {
         Ok(ws) => {
           let (read, write) = ws.split();
 
-          cloned_read.push(ReadConnection::new(read), None).await;
+          cloned_read.push(ReadConnection::new(read)).await;
           cloned_write.push(WriteConnection::new(write)).await;
         }
         Err(err) => error!("Error while upgrading connection: {:?}", err),
@@ -158,13 +158,21 @@ async fn main() -> anyhow::Result<()> {
     }
   });
 
+  let write = tokio::spawn(async move { write_pool.join().await });
+
   select! {
     result = server => {
       info!("Socket closed, quitting...");
       result?;
     },
-    _ = write_pool.join() => info!("Write pool finished"),
-    _ = read_pool.join() => info!("Read pool finished"),
+    result = write => {
+      info!("Write pool finished");
+      result?;
+    },
+    result = read_pool.join(None) => {
+      info!("Read pool finished");
+      result?;
+    },
     result = shutdown_signal() => {
       info!("Termination signal received, quitting...");
       result?;

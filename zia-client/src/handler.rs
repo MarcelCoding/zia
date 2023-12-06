@@ -45,8 +45,8 @@ struct Upstream {
 
 pub(crate) struct Handler {
   upstream: Arc<Upstream>,
-  write_pool: WritePool<WriteHalf<TokioIo<Upgraded>>>,
-  read_pool: ReadPool,
+  write_pool: Arc<WritePool<WriteHalf<TokioIo<Upgraded>>>>,
+  read_pool: Arc<ReadPool>,
 }
 
 impl Handler {
@@ -59,8 +59,8 @@ impl Handler {
     let socket = Arc::new(socket);
     let addr = Arc::new(RwLock::new(None));
 
-    let write_pool = WritePool::new(socket.clone(), addr.clone());
-    let read_pool = ReadPool::new(socket, addr);
+    let write_pool = Arc::new(WritePool::new(socket.clone(), addr.clone()));
+    let read_pool = Arc::new(ReadPool::new(socket, addr));
 
     let upstream_host = upstream
       .host_str()
@@ -92,7 +92,7 @@ impl Handler {
       while missing > 0 || dead_conn_rx.recv().await.is_some() {
         missing = missing.saturating_sub(1);
 
-        if let Err(err) = self.open_connection(dead_conn_tx.clone()).await {
+        if let Err(err) = self.open_connection().await {
           error!("Unable to open connection, trying again in 1s: {err:?}");
           missing += 1;
           tokio::time::sleep(Duration::from_secs(1)).await;
@@ -100,10 +100,18 @@ impl Handler {
       }
     };
 
+    let write_pool = self.write_pool.clone();
+    let read_pool = self.read_pool.clone();
+
+    let write = tokio::spawn(async move { write_pool.join().await });
+
     select! {
       _ = conn_backpressure => info!("Conn Backpressure finished?"),
-      _ = self.write_pool.join() => info!("Write pool finished"),
-      result = self.read_pool.join() => {
+      result = write => {
+        info!("Write pool finished");
+        result?;
+      },
+      result = read_pool.join(Some(&dead_conn_tx)) => {
         info!("Read pool finished");
         result?;
       },
@@ -111,7 +119,7 @@ impl Handler {
     Ok(())
   }
 
-  async fn open_connection(&self, dead_conn: mpsc::Sender<()>) -> anyhow::Result<()> {
+  async fn open_connection(&self) -> anyhow::Result<()> {
     let stream = match &self.upstream.proxy {
       None => {
         let stream = TcpStream::connect((self.upstream.host.as_str(), self.upstream.port)).await?;
@@ -192,10 +200,7 @@ impl Handler {
 
     let (read, write) = ws.split();
 
-    self
-      .read_pool
-      .push(ReadConnection::new(read), Some(dead_conn))
-      .await;
+    self.read_pool.push(ReadConnection::new(read)).await;
     self.write_pool.push(WriteConnection::new(write)).await;
 
     Ok(())

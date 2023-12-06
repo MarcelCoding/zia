@@ -31,8 +31,10 @@ impl<R: AsyncRead + Unpin> ReadConnection<R> {
 
     match message {
       Message::Binary(data) => {
-        let addr = addr.read().await.unwrap();
-        socket.send_to(data, addr).await?;
+        // drop packets until addr is known
+        if let Some(addr) = addr.read().await.as_ref() {
+          socket.send_to(data, addr).await?;
+        }
       }
       _ => unimplemented!(),
     }
@@ -64,13 +66,16 @@ impl ReadPool {
     }
   }
 
-  pub async fn join(&self) -> anyhow::Result<()> {
+  pub async fn join(&self, dead_conn: Option<&mpsc::Sender<()>>) -> anyhow::Result<()> {
     // hack
     loop {
       while let Some(result) = self.wait_for_connections_to_close().await {
         if let Err(err) = result? {
           error!("Error while handling websocket frame: {}", err);
           // TODO: close and remove from write pool
+          if let Some(dead_conn) = dead_conn {
+            dead_conn.send(()).await?;
+          }
         }
       }
 
@@ -79,11 +84,7 @@ impl ReadPool {
     }
   }
 
-  pub async fn push<R: AsyncRead + Unpin + Send + 'static>(
-    &self,
-    mut conn: ReadConnection<R>,
-    dead_conn: Option<mpsc::Sender<()>>,
-  ) {
+  pub async fn push<R: AsyncRead + Unpin + Send + 'static>(&self, mut conn: ReadConnection<R>) {
     let socket = self.socket.clone();
     let addr = self.addr.clone();
 
@@ -93,9 +94,6 @@ impl ReadPool {
         if conn.read.is_closed() {
           warn!("Read connection closed");
           // TODO: open new connection on client
-          if let Some(dead_conn) = dead_conn {
-            dead_conn.send(()).await?;
-          }
           return Ok(());
         }
         conn.handle_frame(&socket, &addr, buf.as_mut()).await?;
