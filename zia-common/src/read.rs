@@ -2,45 +2,23 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
-use tokio::io::AsyncRead;
 use tokio::net::UdpSocket;
 use tokio::select;
 use tokio::sync::{mpsc, Mutex, RwLock};
 use tokio::task::{JoinError, JoinSet};
 use tracing::{error, warn};
-use wsocket::{Message, WebSocket};
 
 use crate::datagram_buffer;
 
-pub struct ReadConnection<R> {
-  read: WebSocket<R>,
-}
-
-impl<R: AsyncRead + Unpin> ReadConnection<R> {
-  pub fn new(read: WebSocket<R>) -> Self {
-    Self { read }
-  }
-
+#[async_trait::async_trait]
+pub trait ReadConnection {
+  fn is_closed(&self) -> bool;
   async fn handle_frame(
     &mut self,
     socket: &UdpSocket,
     addr: &RwLock<Option<SocketAddr>>,
     buf: &mut [u8],
-  ) -> anyhow::Result<()> {
-    let message = self.read.recv(buf).await?;
-
-    match message {
-      Message::Binary(data) => {
-        // drop packets until addr is known
-        if let Some(addr) = addr.read().await.as_ref() {
-          socket.send_to(data, addr).await?;
-        }
-      }
-      _ => unimplemented!(),
-    }
-
-    Ok(())
-  }
+  ) -> anyhow::Result<()>;
 }
 
 pub struct ReadPool {
@@ -84,14 +62,14 @@ impl ReadPool {
     }
   }
 
-  pub async fn push<R: AsyncRead + Unpin + Send + 'static>(&self, mut conn: ReadConnection<R>) {
+  pub async fn push<C: ReadConnection + Send + 'static>(&self, mut conn: C) {
     let socket = self.socket.clone();
     let addr = self.addr.clone();
 
     self.tasks.lock().await.spawn(async move {
       let mut buf = datagram_buffer();
       loop {
-        if conn.read.is_closed() {
+        if conn.is_closed() {
           warn!("Read connection closed");
           // TODO: open new connection on client
           return Ok(());

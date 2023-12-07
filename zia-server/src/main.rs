@@ -23,7 +23,7 @@ use tracing::{error, info, Level};
 use tracing_subscriber::FmtSubscriber;
 use wsocket::{is_upgrade_request, upgrade};
 
-use zia_common::{ReadConnection, ReadPool, WriteConnection, WritePool, MAX_DATAGRAM_SIZE};
+use zia_common::{ReadPool, ReadWsConnection, WritePool, WriteWsConnection, MAX_DATAGRAM_SIZE};
 
 use crate::cfg::ServerCfg;
 
@@ -33,7 +33,7 @@ pin_project! {
   struct HandleRequestFuture {
     req: Request<Incoming>,
     read: Arc<ReadPool>,
-    write: Arc<WritePool<WriteHalf<TokioIo<Upgraded>>>>,
+    write: Arc<WritePool<WriteWsConnection<WriteHalf<TokioIo<Upgraded>>>>>,
   }
 }
 
@@ -72,8 +72,8 @@ impl Future for HandleRequestFuture {
         Ok(ws) => {
           let (read, write) = ws.split();
 
-          cloned_read.push(ReadConnection::new(read)).await;
-          cloned_write.push(WriteConnection::new(write)).await;
+          cloned_read.push(ReadWsConnection::new(read)).await;
+          cloned_write.push(WriteWsConnection::new(write)).await;
         }
         Err(err) => error!("Error while upgrading connection: {:?}", err),
       }
@@ -86,7 +86,7 @@ impl Future for HandleRequestFuture {
 // mod app;
 struct ConnectionHandler {
   read: Arc<ReadPool>,
-  write: Arc<WritePool<WriteHalf<TokioIo<Upgraded>>>>,
+  write: Arc<WritePool<WriteWsConnection<WriteHalf<TokioIo<Upgraded>>>>>,
 }
 
 impl Service<Request<Incoming>> for ConnectionHandler {

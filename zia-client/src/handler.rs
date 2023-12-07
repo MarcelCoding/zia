@@ -1,5 +1,8 @@
 use std::future::Future;
+use std::io::{Error, IoSlice};
+use std::pin::Pin;
 use std::sync::Arc;
+use std::task::{Context, Poll};
 use std::time::Duration;
 
 use anyhow::anyhow;
@@ -8,20 +11,23 @@ use hyper::upgrade::Upgraded;
 use hyper::Uri;
 use hyper_util::rt::TokioIo;
 use once_cell::sync::Lazy;
+use pin_project_lite::pin_project;
 use rustls_pki_types::ServerName;
-use tokio::io::{BufStream, WriteHalf};
-use tokio::net::TcpStream;
-use tokio::net::UdpSocket;
+use tokio::io::{split, AsyncRead, AsyncWrite, BufStream, ReadBuf, ReadHalf, WriteHalf};
+use tokio::net::{TcpStream, UdpSocket};
 use tokio::select;
 use tokio::sync::{mpsc, RwLock};
+use tokio_rustls::client::TlsStream;
 use tokio_rustls::rustls::{ClientConfig, RootCertStore};
 use tokio_rustls::TlsConnector;
 use tracing::{error, info};
 use url::Url;
 use wsocket::handshake;
 
-use zia_common::{ReadConnection, WriteConnection, MAX_DATAGRAM_SIZE};
-use zia_common::{ReadPool, WritePool};
+use zia_common::{
+  PoolEntry, ReadConnection, ReadPool, ReadTcpConnection, ReadWsConnection, WriteConnection,
+  WritePool, WriteTcpConnection, WriteWsConnection, MAX_DATAGRAM_SIZE,
+};
 
 static TLS_CONFIG: Lazy<Arc<ClientConfig>> = Lazy::new(|| {
   let mut store = RootCertStore::empty();
@@ -34,7 +40,7 @@ static TLS_CONFIG: Lazy<Arc<ClientConfig>> = Lazy::new(|| {
   Arc::new(config)
 });
 
-struct Upstream {
+pub struct Upstream {
   uri: Uri,
   host: String,
   port: u16,
@@ -43,13 +49,13 @@ struct Upstream {
   ws_masking: bool,
 }
 
-pub(crate) struct Handler {
+pub(crate) struct Handler<W: ConnectionManager> {
   upstream: Arc<Upstream>,
-  write_pool: Arc<WritePool<WriteHalf<TokioIo<Upgraded>>>>,
+  write_pool: Arc<WritePool<W::WriteConnection>>,
   read_pool: Arc<ReadPool>,
 }
 
-impl Handler {
+impl<C: ConnectionManager> Handler<C> {
   pub(crate) fn new(
     socket: UdpSocket,
     upstream: Url,
@@ -92,11 +98,17 @@ impl Handler {
       while missing > 0 || dead_conn_rx.recv().await.is_some() {
         missing = missing.saturating_sub(1);
 
-        if let Err(err) = self.open_connection().await {
-          error!("Unable to open connection, trying again in 1s: {err:?}");
-          missing += 1;
-          tokio::time::sleep(Duration::from_secs(1)).await;
-        }
+        match C::open_connection(&self.upstream).await {
+          Ok((read, write)) => {
+            self.read_pool.push(read).await;
+            self.write_pool.push(write).await;
+          }
+          Err(err) => {
+            error!("Unable to open connection, trying again in 1s: {err:?}");
+            missing += 1;
+            tokio::time::sleep(Duration::from_secs(1)).await;
+          }
+        };
       }
     };
 
@@ -118,11 +130,44 @@ impl Handler {
     }
     Ok(())
   }
+}
 
-  async fn open_connection(&self) -> anyhow::Result<()> {
-    let stream = match &self.upstream.proxy {
+// Tie hyper's executor to tokio runtime
+struct SpawnExecutor;
+
+impl<Fut> hyper::rt::Executor<Fut> for SpawnExecutor
+where
+  Fut: Future + Send + 'static,
+  Fut::Output: Send + 'static,
+{
+  fn execute(&self, fut: Fut) {
+    tokio::task::spawn(fut);
+  }
+}
+
+#[async_trait::async_trait]
+pub trait ConnectionManager {
+  type ReadConnection: ReadConnection + Send + 'static;
+  type WriteConnection: WriteConnection + PoolEntry + Send + 'static;
+
+  async fn open_connection(
+    upstream: &Upstream,
+  ) -> anyhow::Result<(Self::ReadConnection, Self::WriteConnection)>;
+}
+
+pub struct WsConnectionManager;
+
+#[async_trait::async_trait]
+impl ConnectionManager for WsConnectionManager {
+  type ReadConnection = ReadWsConnection<ReadHalf<TokioIo<Upgraded>>>;
+  type WriteConnection = WriteWsConnection<WriteHalf<TokioIo<Upgraded>>>;
+
+  async fn open_connection(
+    upstream: &Upstream,
+  ) -> anyhow::Result<(Self::ReadConnection, Self::WriteConnection)> {
+    let stream = match &upstream.proxy {
       None => {
-        let stream = TcpStream::connect((self.upstream.host.as_str(), self.upstream.port)).await?;
+        let stream = TcpStream::connect((upstream.host.as_str(), upstream.port)).await?;
         stream.set_nodelay(true)?;
 
         info!("Connected to tcp");
@@ -148,14 +193,14 @@ impl Handler {
           Some(password) => {
             http_connect_tokio_with_basic_auth(
               &mut stream,
-              &self.upstream.host,
-              self.upstream.port,
+              &upstream.host,
+              upstream.port,
               proxy.username(),
               password,
             )
             .await?
           }
-          None => http_connect_tokio(&mut stream, &self.upstream.host, self.upstream.port).await?,
+          None => http_connect_tokio(&mut stream, &upstream.host, upstream.port).await?,
         };
 
         info!("Proxy handshake");
@@ -166,8 +211,8 @@ impl Handler {
 
     let stream = BufStream::new(stream);
 
-    let (ws, _) = if self.upstream.tls {
-      let domain = ServerName::try_from(self.upstream.host.as_str())?.to_owned();
+    let (ws, _) = if upstream.tls {
+      let domain = ServerName::try_from(upstream.host.as_str())?.to_owned();
       let stream = TlsConnector::from(TLS_CONFIG.clone())
         .connect(domain, stream)
         .await?;
@@ -175,23 +220,23 @@ impl Handler {
 
       handshake(
         stream,
-        &self.upstream.uri,
-        &self.upstream.host,
-        self.upstream.port,
+        &upstream.uri,
+        &upstream.host,
+        upstream.port,
         "zia",
         MAX_DATAGRAM_SIZE,
-        self.upstream.ws_masking,
+        upstream.ws_masking,
       )
       .await?
     } else {
       handshake(
         stream,
-        &self.upstream.uri,
-        &self.upstream.host,
-        self.upstream.port,
+        &upstream.uri,
+        &upstream.host,
+        upstream.port,
         "zia",
         MAX_DATAGRAM_SIZE,
-        self.upstream.ws_masking,
+        upstream.ws_masking,
       )
       .await?
     };
@@ -200,22 +245,147 @@ impl Handler {
 
     let (read, write) = ws.split();
 
-    self.read_pool.push(ReadConnection::new(read)).await;
-    self.write_pool.push(WriteConnection::new(write)).await;
-
-    Ok(())
+    Ok((ReadWsConnection::new(read), WriteWsConnection::new(write)))
   }
 }
 
-// Tie hyper's executor to tokio runtime
-struct SpawnExecutor;
+pub struct TcpConnectionManager;
 
-impl<Fut> hyper::rt::Executor<Fut> for SpawnExecutor
-where
-  Fut: Future + Send + 'static,
-  Fut::Output: Send + 'static,
-{
-  fn execute(&self, fut: Fut) {
-    tokio::task::spawn(fut);
+#[async_trait::async_trait]
+impl ConnectionManager for TcpConnectionManager {
+  type ReadConnection = ReadTcpConnection<ReadHalf<MaybeTlsStream<BufStream<TcpStream>>>>;
+  type WriteConnection = WriteTcpConnection<WriteHalf<MaybeTlsStream<BufStream<TcpStream>>>>;
+
+  async fn open_connection(
+    upstream: &Upstream,
+  ) -> anyhow::Result<(Self::ReadConnection, Self::WriteConnection)> {
+    let stream = match &upstream.proxy {
+      None => {
+        let stream = TcpStream::connect((upstream.host.as_str(), upstream.port)).await?;
+        stream.set_nodelay(true)?;
+
+        info!("Connected to tcp");
+
+        stream
+      }
+      Some(proxy) => {
+        assert_eq!(proxy.scheme(), "http");
+
+        let proxy_host = proxy
+          .host_str()
+          .ok_or_else(|| anyhow!("Proxy url is missing host"))?;
+        let proxy_port = proxy
+          .port_or_known_default()
+          .ok_or_else(|| anyhow!("Proxy url is missing port"))?;
+
+        let mut stream = TcpStream::connect((proxy_host, proxy_port)).await?;
+        stream.set_nodelay(true)?;
+
+        info!("Connected to tcp");
+
+        match proxy.password() {
+          Some(password) => {
+            http_connect_tokio_with_basic_auth(
+              &mut stream,
+              &upstream.host,
+              upstream.port,
+              proxy.username(),
+              password,
+            )
+            .await?
+          }
+          None => http_connect_tokio(&mut stream, &upstream.host, upstream.port).await?,
+        };
+
+        info!("Proxy handshake");
+
+        stream
+      }
+    };
+
+    let stream = BufStream::new(stream);
+
+    let stream = if upstream.tls {
+      let domain = ServerName::try_from(upstream.host.as_str())?.to_owned();
+      let stream = TlsConnector::from(TLS_CONFIG.clone())
+        .connect(domain, stream)
+        .await?;
+      info!("Upgraded to tls");
+
+      MaybeTlsStream::Tls { io: stream }
+    } else {
+      MaybeTlsStream::Raw { io: stream }
+    };
+
+    info!("Finished websocket handshake");
+
+    let (read, write) = split(stream);
+
+    Ok((ReadTcpConnection::new(read), WriteTcpConnection::new(write)))
+  }
+}
+pin_project! {
+  #[project = MaybeTlsStreamProj]
+  pub enum MaybeTlsStream<IO> {
+    Tls { #[pin] io: TlsStream<IO> },
+    Raw { #[pin] io: IO },
+  }
+}
+
+impl<IO: AsyncRead + AsyncWrite + Unpin> AsyncWrite for MaybeTlsStream<IO> {
+  fn poll_write(
+    self: Pin<&mut Self>,
+    cx: &mut Context<'_>,
+    buf: &[u8],
+  ) -> Poll<Result<usize, Error>> {
+    match self.project() {
+      MaybeTlsStreamProj::Tls { io } => io.poll_write(cx, buf),
+      MaybeTlsStreamProj::Raw { io } => io.poll_write(cx, buf),
+    }
+  }
+
+  fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Error>> {
+    match self.project() {
+      MaybeTlsStreamProj::Tls { io } => io.poll_flush(cx),
+      MaybeTlsStreamProj::Raw { io } => io.poll_flush(cx),
+    }
+  }
+
+  fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Error>> {
+    match self.project() {
+      MaybeTlsStreamProj::Tls { io } => io.poll_shutdown(cx),
+      MaybeTlsStreamProj::Raw { io } => io.poll_shutdown(cx),
+    }
+  }
+
+  fn poll_write_vectored(
+    self: Pin<&mut Self>,
+    cx: &mut Context<'_>,
+    bufs: &[IoSlice<'_>],
+  ) -> Poll<Result<usize, Error>> {
+    match self.project() {
+      MaybeTlsStreamProj::Tls { io } => io.poll_write_vectored(cx, bufs),
+      MaybeTlsStreamProj::Raw { io } => io.poll_write_vectored(cx, bufs),
+    }
+  }
+
+  fn is_write_vectored(&self) -> bool {
+    match self {
+      MaybeTlsStream::Tls { io } => io.is_write_vectored(),
+      MaybeTlsStream::Raw { io } => io.is_write_vectored(),
+    }
+  }
+}
+
+impl<IO: AsyncRead + AsyncWrite + Unpin> AsyncRead for MaybeTlsStream<IO> {
+  fn poll_read(
+    self: Pin<&mut Self>,
+    cx: &mut Context<'_>,
+    buf: &mut ReadBuf<'_>,
+  ) -> Poll<std::io::Result<()>> {
+    match self.project() {
+      MaybeTlsStreamProj::Tls { io } => io.poll_read(cx, buf),
+      MaybeTlsStreamProj::Raw { io } => io.poll_read(cx, buf),
+    }
   }
 }

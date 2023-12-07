@@ -47,8 +47,8 @@ pub struct Pool<T: PoolEntry> {
   rx: Mutex<mpsc::UnboundedReceiver<T>>,
 }
 
-impl<T: PoolEntry> Pool<T> {
-  pub fn new() -> Self {
+impl<T: PoolEntry> Default for Pool<T> {
+  fn default() -> Self {
     let (tx, rx) = mpsc::unbounded_channel();
     Self {
       size: Arc::new(AtomicUsize::new(0)),
@@ -56,7 +56,9 @@ impl<T: PoolEntry> Pool<T> {
       rx: Mutex::new(rx),
     }
   }
+}
 
+impl<T: PoolEntry> Pool<T> {
   pub async fn acquire(&self) -> Option<PoolGuard<T>> {
     if self.size.load(Ordering::Relaxed) == 0 {
       return None;

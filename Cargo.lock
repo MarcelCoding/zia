@@ -84,6 +84,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "async-trait"
+version = "0.1.74"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a66537f1bb974b254c98ed142ff995236e81b9d0fe4db0575f46612cb15eb0f9"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "backtrace"
 version = "0.3.69"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1134,10 +1145,12 @@ version = "0.0.0-git"
 dependencies = [
  "anyhow",
  "async-http-proxy",
+ "async-trait",
  "clap",
  "hyper",
  "hyper-util",
  "once_cell",
+ "pin-project-lite",
  "rustls-pki-types",
  "tokio",
  "tokio-rustls",
@@ -1154,6 +1167,7 @@ name = "zia-common"
 version = "0.0.0-git"
 dependencies = [
  "anyhow",
+ "async-trait",
  "tokio",
  "tracing",
  "wsocket",

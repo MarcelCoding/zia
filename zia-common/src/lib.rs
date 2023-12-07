@@ -1,11 +1,16 @@
 use std::mem;
 
+pub use pool::*;
 pub use read::*;
+pub use tcp::*;
 pub use write::*;
+pub use ws::*;
 
 mod pool;
 mod read;
+mod tcp;
 mod write;
+mod ws;
 
 pub const MAX_DATAGRAM_SIZE: usize = u16::MAX as usize - mem::size_of::<u16>();
 

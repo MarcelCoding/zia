@@ -2,56 +2,29 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
-use tokio::io::AsyncWrite;
 use tokio::net::UdpSocket;
 use tokio::sync::RwLock;
 use tracing::{error, warn};
-use wsocket::{Message, WebSocket};
 
 use crate::pool::{Pool, PoolEntry};
-use crate::{datagram_buffer, MAX_DATAGRAM_SIZE};
 
-pub struct WriteConnection<W> {
-  write: WebSocket<W>,
-  buf: Box<[u8; MAX_DATAGRAM_SIZE]>,
+#[async_trait::async_trait]
+pub trait WriteConnection {
+  fn buf_as_mut(&mut self) -> &mut [u8];
+  async fn flush(&mut self, size: usize) -> anyhow::Result<()>;
 }
 
-impl<W: AsyncWrite + Unpin> WriteConnection<W> {
-  pub fn new(write: WebSocket<W>) -> Self {
-    Self {
-      buf: datagram_buffer(),
-      write,
-    }
-  }
-
-  async fn flush(&mut self, size: usize) -> anyhow::Result<()> {
-    assert!(size <= MAX_DATAGRAM_SIZE);
-
-    let message = Message::Binary(&self.buf[..size]);
-    self.write.send(message).await?;
-
-    Ok(())
-  }
-}
-
-impl<W> PoolEntry for WriteConnection<W> {
-  fn is_closed(&self) -> bool {
-    self.write.is_closed()
-    // TODO: open new connection on client - maybe fancy login in "abstract" pool
-  }
-}
-
-pub struct WritePool<W> {
+pub struct WritePool<C: PoolEntry> {
   socket: Arc<UdpSocket>,
-  pool: Pool<WriteConnection<W>>,
+  pool: Pool<C>,
   addr: Arc<RwLock<Option<SocketAddr>>>,
 }
 
-impl<W: AsyncWrite + Unpin + Send + 'static> WritePool<W> {
+impl<C: WriteConnection + PoolEntry + Send + 'static> WritePool<C> {
   pub fn new(socket: Arc<UdpSocket>, addr: Arc<RwLock<Option<SocketAddr>>>) -> Self {
     Self {
       socket,
-      pool: Pool::new(),
+      pool: Pool::default(),
       addr,
     }
   }
@@ -69,7 +42,7 @@ impl<W: AsyncWrite + Unpin + Send + 'static> WritePool<W> {
     }
   }
 
-  pub async fn push(&self, conn: WriteConnection<W>) {
+  pub async fn push(&self, conn: C) {
     self.pool.push(conn);
   }
 
@@ -99,7 +72,7 @@ impl<W: AsyncWrite + Unpin + Send + 'static> WritePool<W> {
       }
 
       // read from udp socket and save to buf of selected conn
-      let (read, addr) = self.socket.recv_from(conn.buf.as_mut()).await.unwrap();
+      let (read, addr) = self.socket.recv_from(conn.buf_as_mut()).await.unwrap();
 
       self.update_addr(addr).await;
 

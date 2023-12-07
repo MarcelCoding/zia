@@ -1,3 +1,4 @@
+use anyhow::anyhow;
 use clap::Parser;
 use tokio::net::UdpSocket;
 use tokio::select;
@@ -6,7 +7,7 @@ use tracing::{info, Level};
 use tracing_subscriber::FmtSubscriber;
 
 use crate::cfg::ClientCfg;
-use crate::handler::Handler;
+use crate::handler::{Handler, TcpConnectionManager, WsConnectionManager};
 
 mod cfg;
 mod handler;
@@ -33,11 +34,31 @@ async fn main() -> anyhow::Result<()> {
   let socket = UdpSocket::bind(config.listen_addr).await?;
   info!("Listening on {}/udp...", config.listen_addr);
 
-  let handler = Handler::new(socket, config.upstream, config.proxy, config.ws_masking)?;
+  let handler = match config.upstream.scheme() {
+    "ws" | "wss" => tokio::spawn(async move {
+      let handler = Handler::<WsConnectionManager>::new(
+        socket,
+        config.upstream,
+        config.proxy,
+        config.ws_masking,
+      )?;
+      handler.run(config.count).await
+    }),
+    "tcp" | "tcps" => tokio::spawn(async move {
+      let handler = Handler::<TcpConnectionManager>::new(
+        socket,
+        config.upstream,
+        config.proxy,
+        config.ws_masking,
+      )?;
+      handler.run(config.count).await
+    }),
+    _ => return Err(anyhow!("Umsupported upstream protocol")),
+  };
 
   select! {
-    result = handler.run(config.count) => {
-      result?;
+    result = handler => {
+      result??;
       info!("Socket closed, quitting...");
     },
     result = shutdown_signal() => {
