@@ -11,6 +11,7 @@ use crate::handler::{Handler, TcpConnectionManager, WsConnectionManager};
 
 mod cfg;
 mod handler;
+mod tls;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
