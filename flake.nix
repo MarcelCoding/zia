@@ -10,32 +10,34 @@
   };
 
   outputs = { self, nixpkgs, flake-utils, fenix }:
-    flake-utils.lib.eachDefaultSystem (system:
-      let
-        pkgs = (import nixpkgs) {
-          inherit system;
-        };
-      in
-      rec {
-        packages = {
-          zia-client = let manifest = (pkgs.lib.importTOML ./zia-client/Cargo.toml).package; in pkgs.rustPlatform.buildRustPackage {
-            pname = manifest.name;
-            version = manifest.version;
-            cargoLock.lockFile = ./Cargo.lock;
-            src = pkgs.lib.cleanSource ./.;
-            cargoBuildFlags = "-p ${manifest.name}";
-            nativeBuildInputs = [ fenix.packages.${system}.stable.toolchain ];
+    flake-utils.lib.eachDefaultSystem
+      (system:
+        let
+          pkgs = (import nixpkgs) {
+            inherit system;
           };
+        in
+        {
+          packages = {
+            zia-client = pkgs.callPackage ./derivation.nix {
+              inherit fenix;
+              cargoToml = ./zia-client/Cargo.toml;
+            };
 
-          zia-server = let manifest = (pkgs.lib.importTOML ./zia-server/Cargo.toml).package; in pkgs.rustPlatform.buildRustPackage {
-            pname = manifest.name;
-            version = manifest.version;
-            cargoLock.lockFile = ./Cargo.lock;
-            src = pkgs.lib.cleanSource ./.;
-            cargoBuildFlags = "-p ${manifest.name}";
-            nativeBuildInputs = [ fenix.packages.${system}.stable.toolchain ];
+            zia-server = pkgs.callPackage ./derivation.nix {
+              inherit fenix;
+              cargoToml = ./zia-server/Cargo.toml;
+            };
           };
-        };
-      }
-    );
+        }
+      ) // {
+      overlays.default = _: prev: {
+        zia-client = self.packages."${prev.system}".zia-client;
+        zia-server = self.packages."${prev.system}".zia-server;
+      };
+
+      nixosModules = {
+        zia-server = import ./nixos-modules/zia-server.nix;
+      };
+    };
 }
