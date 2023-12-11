@@ -57,10 +57,14 @@ in
 
         serviceConfig = {
           ExecStart = "${cfg.package}/bin/zia-server";
-          Type = "notify";
-          # User and group
           DynamicUser = true;
           User = "zia-server";
+
+          Environment = [
+            "ZIA_LISTEN_ADDR=${conf.listen-addr}"
+            "ZIA_UPSTREAM=${conf.upstream}"
+            "ZIA_MODE=${conf.mode}"
+          ];
         };
       })
       enabledServers;
