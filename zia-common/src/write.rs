@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use tokio::net::UdpSocket;
 use tokio::sync::RwLock;
-use tracing::{error, warn};
+use tracing::{debug, error};
 
 use crate::pool::{Pool, PoolEntry};
 
@@ -61,7 +61,7 @@ impl<C: WriteConnection + PoolEntry + Send + 'static> WritePool<C> {
       let mut conn = match conn {
         Some(conn) => conn,
         None => {
-          warn!("Write pool is empty, waiting 1s");
+          debug!("Write pool is empty, waiting 1s");
           tokio::time::sleep(Duration::from_secs(1)).await;
           continue;
         }
