@@ -15,12 +15,6 @@ in
         description = lib.mdDoc "Which Zia Server derivation to use.";
       };
 
-      user = lib.mkOption {
-        type = lib.types.str;
-        default = "zia-server";
-        description = lib.mdDoc "The username and groupname for zia-server.";
-      };
-
       servers = lib.mkOption {
         type = lib.types.attrsOf (lib.types.submodule ({ config, name, ... }: {
           options = {
@@ -54,14 +48,6 @@ in
   config = lib.mkIf (enabledServers != { }) {
     environment.systemPackages = [ cfg.package ];
 
-    users.users."${cfg.user}" = {
-      description = "System user for the zia-server instance ${cfg.user}";
-      isSystemUser = true;
-      group = cfg.user;
-    };
-
-    users.groups."${cfg.user}" = { };
-
     systemd.services = lib.mapAttrs'
       (name: conf: lib.nameValuePair (ziaServerName name) {
         description = "Zia Server - ${ziaServerName name}";
@@ -73,8 +59,8 @@ in
           ExecStart = "${cfg.package}/bin/zia-server";
           Type = "notify";
           # User and group
-          User = cfg.user;
-          Group = cfg.user;
+          DynamicUser = true;
+          User = "zia-server";
         };
       })
       enabledServers;

@@ -2,14 +2,9 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/release-23.11";
     flake-utils.url = "github:numtide/flake-utils";
-
-    fenix = {
-      url = "github:nix-community/fenix";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
   };
 
-  outputs = { self, nixpkgs, flake-utils, fenix }:
+  outputs = { self, nixpkgs, flake-utils }:
     flake-utils.lib.eachDefaultSystem
       (system:
         let
@@ -20,12 +15,10 @@
         {
           packages = {
             zia-client = pkgs.callPackage ./derivation.nix {
-              inherit fenix;
               cargoToml = ./zia-client/Cargo.toml;
             };
 
             zia-server = pkgs.callPackage ./derivation.nix {
-              inherit fenix;
               cargoToml = ./zia-server/Cargo.toml;
             };
           };
