@@ -19,10 +19,17 @@ in
         type = lib.types.attrsOf (lib.types.submodule ({ config, name, ... }: {
           options = {
             enable = lib.mkEnableOption (lib.mdDoc "Zia Server.");
-            listen-addr = lib.mkOption {
-              type = lib.types.str;
-              description = lib.mkDoc "The socket address zia should be listening on.";
-              default = null;
+            listen = {
+              addr = lib.mkOption {
+                type = lib.types.str;
+                description = lib.mkDoc "The ip address zia should be listening on.";
+                default = "0.0.0.0";
+              };
+              port = lib.mkOption {
+                type = lib.types.port;
+                description = lib.mkDoc "The port zia shuld be listening on.";
+                default = null;
+              };
             };
             upstream = lib.mkOption {
               type = lib.types.str;
@@ -47,6 +54,7 @@ in
 
   config = lib.mkIf (enabledServers != { }) {
     environment.systemPackages = [ cfg.package ];
+    networking.firewall.allowedTCPPorts = [ lib.mapAddrs' (_: conf: conf.listen.port) ];
 
     systemd.services = lib.mapAttrs'
       (name: conf: lib.nameValuePair (ziaServerName name) {
@@ -61,7 +69,7 @@ in
           User = "zia-server";
 
           Environment = [
-            "ZIA_LISTEN_ADDR=${conf.listen-addr}"
+            "ZIA_LISTEN_ADDR=${conf.listen.addr}:${conf.listen.port}"
             "ZIA_UPSTREAM=${conf.upstream}"
             "ZIA_MODE=${conf.mode}"
           ];
