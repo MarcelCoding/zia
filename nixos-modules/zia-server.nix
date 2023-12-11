@@ -54,7 +54,7 @@ in
 
   config = lib.mkIf (enabledServers != { }) {
     environment.systemPackages = [ cfg.package ];
-    networking.firewall.allowedTCPPorts = [ lib.mapAddrs' (_: conf: conf.listen.port) ];
+    networking.firewall.allowedTCPPorts = lib.mapAttrsToList (_: conf: conf.listen.port) enabledServers;
 
     systemd.services = lib.mapAttrs'
       (name: conf: lib.nameValuePair (ziaServerName name) {
@@ -69,7 +69,7 @@ in
           User = "zia-server";
 
           Environment = [
-            "ZIA_LISTEN_ADDR=${conf.listen.addr}:${conf.listen.port}"
+            "ZIA_LISTEN_ADDR=${conf.listen.addr}:${toString conf.listen.port}"
             "ZIA_UPSTREAM=${conf.upstream}"
             "ZIA_MODE=${conf.mode}"
           ];
