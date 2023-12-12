@@ -123,6 +123,9 @@ async fn main() -> anyhow::Result<()> {
   ));
 
   let socket = Arc::new(UdpSocket::bind(Into::<SocketAddr>::into(([0, 0, 0, 0], 0))).await?);
+  // TODO: query dns record again, dyndns might change the ip
+  //       currently only at the start of the program the ip
+  //       is being queried
   socket.connect(&config.upstream).await?;
   info!("Connected to upstream udp://{}...", config.upstream);
 
