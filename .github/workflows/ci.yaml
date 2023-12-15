@@ -92,27 +92,27 @@ jobs:
           mv target/${{ matrix.target }}/release/zia-server zia-server_${{ matrix.target }}${{ env.NAME_PREFIX }}
 
       - name: Upload Artifact (client)
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: zia-client_${{ matrix.target }}${{ env.NAME_PREFIX }}
           path: zia-client_${{ matrix.target }}${{ env.NAME_PREFIX }}
 
       - name: Upload Artifact (server)
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: zia-server_${{ matrix.target }}${{ env.NAME_PREFIX }}
           path: zia-server_${{ matrix.target }}${{ env.NAME_PREFIX }}
 
       - name: Upload Artifact deb (client)
         if: matrix.linker == 'dynamic'
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: zia-client_${{ matrix.target }}.deb
           path: target/${{ matrix.target }}/debian/zia-client_*.deb
 
       - name: Upload Artifact deb (server)
         if: matrix.linker == 'dynamic'
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: zia-server_${{ matrix.target }}.deb
           path: target/${{ matrix.target }}/debian/zia-server_*.deb
@@ -182,13 +182,13 @@ jobs:
           mv target/release/zia-server.exe zia-server_${{ matrix.os }}_x86_64.exe
 
       - name: Upload Artifact (client)
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: zia-client_${{ matrix.os }}_x86_64
           path: zia-client_${{ matrix.os }}_x86_64*
 
       - name: Upload Artifact (server)
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: zia-server_${{ matrix.os }}_x86_64
           path: zia-server_${{ matrix.os }}_x86_64*
