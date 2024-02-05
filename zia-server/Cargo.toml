@@ -8,7 +8,7 @@ description = "Proxy udp over websocket, useful to use Wireguard in restricted n
 
 [dependencies]
 clap = { version = "4.4", default-features = false, features = ["std", "color", "help", "usage", "error-context", "suggestions", "derive", "env"] }
-tokio = { version = "1.35", default-features = false, features = ["macros", "rt-multi-thread", "signal", "io-util"] }
+tokio = { version = "1.36", default-features = false, features = ["macros", "rt-multi-thread", "signal", "io-util"] }
 tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "ansi"] }
 tracing = { version = "0.1", default-features = false, features = ["release_max_level_info"] }
 wsocket = { version = "0.2", default-features = false, features = ["upgrade"] }
