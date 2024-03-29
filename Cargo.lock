@@ -117,9 +117,9 @@ checksum = "9e1b586273c5702936fe7b7d6896644d8be71e6314cfe09d3167c95f712589e8"
 
 [[package]]
 name = "base64"
-version = "0.21.7"
+version = "0.22.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9d297deb1925b89f2ccc13d7635fa0714f12c87adce1c75356b39ca9b7178567"
+checksum = "9475866fec1451be56a3c2400fd081ff546538961565ccb5b7142cbd22bc7a51"
 
 [[package]]
 name = "block-buffer"
@@ -1064,11 +1064,11 @@ checksum = "32b752e52a2da0ddfbdbcc6fceadfeede4c939ed16d13e648833a61dfb611ed8"
 
 [[package]]
 name = "wsocket"
-version = "0.2.0"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5e445db323f03633d87544458e471e47f06c3714bf1cf6ed0c9099e1daf4c87b"
+checksum = "005b84a90a3abfad2602d744524a3a1701674c8997dccd9fbdc12480de3df80c"
 dependencies = [
- "base64 0.21.7",
+ "base64 0.22.0",
  "http-body-util",
  "hyper",
  "hyper-util",
