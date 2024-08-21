@@ -7,6 +7,6 @@ pkgs.rustPlatform.buildRustPackage {
   version = manifest.version;
   cargoLock.lockFile = ./Cargo.lock;
   src = lib.cleanSource ./.;
-  cargoBuildFlags = "--package ${manifest.name} --bin ${manifest.name}";
-  checkFlags = "--package ${manifest.name} --bin ${manifest.name}";
+  cargoBuildFlags = "--bin ${manifest.name}";
+  #checkFlags = "--bin ${manifest.name}";
 }
