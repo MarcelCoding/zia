@@ -12,7 +12,7 @@ tokio = { version = "1.40", default-features = false, features = ["macros", "rt-
 tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "ansi"] }
 tracing = { version = "0.1", default-features = false, features = ["release_max_level_info"] }
 wsocket = { version = "0.3", default-features = false, features = ["upgrade"] }
-hyper = { version = "1.4", default-features = false, features = ["server", "http1"] }
+hyper = { version = "1.5", default-features = false, features = ["server", "http1"] }
 hyper-util = { version = "0.1", default-features = false, features = ["tokio"] }
 pin-project-lite = { version = "0.2", default-features = false }
 http-body-util = { version = "0.1", default-features = false }
