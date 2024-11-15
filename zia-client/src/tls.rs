@@ -1,9 +1,8 @@
 use std::io::{Error, IoSlice};
 use std::pin::Pin;
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 use std::task::{Context, Poll};
 
-use once_cell::sync::Lazy;
 use pin_project_lite::pin_project;
 use rustls_pki_types::ServerName;
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
@@ -11,7 +10,7 @@ use tokio_rustls::client::TlsStream;
 use tokio_rustls::rustls::{ClientConfig, RootCertStore};
 use tokio_rustls::TlsConnector;
 
-static TLS_CONFIG: Lazy<Arc<ClientConfig>> = Lazy::new(|| {
+static TLS_CONFIG: LazyLock<Arc<ClientConfig>> = LazyLock::new(|| {
   let mut store = RootCertStore::empty();
   store.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
 

@@ -1,4 +1,3 @@
-use std::future::Future;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -106,19 +105,6 @@ impl<C: ConnectionManager> Handler<C> {
       },
     }
     Ok(())
-  }
-}
-
-// Tie hyper's executor to tokio runtime
-struct SpawnExecutor;
-
-impl<Fut> hyper::rt::Executor<Fut> for SpawnExecutor
-where
-  Fut: Future + Send + 'static,
-  Fut::Output: Send + 'static,
-{
-  fn execute(&self, fut: Fut) {
-    tokio::task::spawn(fut);
   }
 }
 
