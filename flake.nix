@@ -14,11 +14,11 @@
         in
         {
           packages = {
-            zia-client = pkgs.callPackage ./derivation.nix {
+            zia-client = pkgs.callPackage ./package.nix {
               cargoToml = ./zia-client/Cargo.toml;
             };
 
-            zia-server = pkgs.callPackage ./derivation.nix {
+            zia-server = pkgs.callPackage ./package.nix {
               cargoToml = ./zia-server/Cargo.toml;
             };
           };
