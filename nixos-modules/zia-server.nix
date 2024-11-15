@@ -2,24 +2,18 @@
 
 let
   cfg = config.services.zia-server;
-  ziaServerName = name: "zia-server" + "-" + name;
-  enabledServers = lib.filterAttrs (name: conf: conf.enable) config.services.zia-server.servers;
-
+  ziaServerName = name: "zia-server-${name}";
+  enabledServers = lib.filterAttrs (_: conf: conf.enable) config.services.zia-server.servers;
 in
 {
   options = {
     services.zia-server = {
-      package = lib.mkOption {
-        type = lib.types.package;
-        default = pkgs.zia-server;
-        defaultText = lib.literalExpression "pkgs.zia-server";
-        description = "Which Zia Server derivation to use.";
-      };
+      package = lib.mkPackageOption pkgs "zia-server" { };
 
       servers = lib.mkOption {
-        type = lib.types.attrsOf (lib.types.submodule ({ config, name, ... }: {
+        type = lib.types.attrsOf (lib.types.submodule {
           options = {
-            enable = lib.mkEnableOption "Zia Server.";
+            enable = lib.mkEnableOption "Zia Server";
             listen = {
               addr = lib.mkOption {
                 type = lib.types.str;
@@ -28,7 +22,7 @@ in
               };
               port = lib.mkOption {
                 type = lib.types.port;
-                description = "The port zia shuld be listening on.";
+                description = "The port zia should be listening on.";
                 default = null;
               };
             };
@@ -39,7 +33,7 @@ in
             };
             mode = lib.mkOption {
               type = lib.types.enum [ "ws" ];
-              description = "The mode zia sould be listening with.";
+              description = "The mode zia should be listening with.";
               default = "ws";
             };
             openFirewall = lib.mkOption {
@@ -48,32 +42,31 @@ in
               description = "Whether to open ports in the firewall for the server.";
             };
           };
-        }));
+        });
       };
     };
   };
 
   config = lib.mkIf (enabledServers != { }) {
-    environment.systemPackages = [ cfg.package ];
-    networking.firewall.allowedTCPPorts = lib.mapAttrsToList (_: conf: conf.listen.port) enabledServers;
+    networking.firewall.allowedTCPPorts = lib.mkMerge (lib.mapAttrsToList (_: conf: if conf.openFirewall then [ conf.listen.port ] else [ ]) enabledServers);
 
     systemd.services = lib.mapAttrs'
       (name: conf: lib.nameValuePair (ziaServerName name) {
-        description = "Zia Server - ${ziaServerName name}";
+        description = "Zia Server (${name})";
 
         wantedBy = [ "multi-user.target" ];
         after = [ "network.target" ];
 
-        serviceConfig = {
-          ExecStart = "${cfg.package}/bin/zia-server";
-          DynamicUser = true;
-          User = "zia-server";
+        environment = {
+          ZIA_LISTEN_ADDR = "${if (lib.hasInfix ":" conf.listen.addr) then "[${conf.listen.addr}]" else conf.listen.addr}:${toString conf.listen.port}";
+          ZIA_UPSTREAM = conf.upstream;
+          ZIA_MODE = conf.mode;
+        };
 
-          Environment = [
-            "ZIA_LISTEN_ADDR=${if (lib.hasInfix ":" conf.listen.addr) then "[${conf.listen.addr}]" else conf.listen.addr}:${toString conf.listen.port}"
-            "ZIA_UPSTREAM=${conf.upstream}"
-            "ZIA_MODE=${conf.mode}"
-          ];
+        serviceConfig = {
+          ExecStart = lib.getExe cfg.package;
+          DynamicUser = true;
+          User = "zia-server-${name}";
         };
       })
       enabledServers;
