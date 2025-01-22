@@ -44,6 +44,8 @@ Environment variables:
 ZIA_LISTEN_ADDR=127.0.0.1:8080 # local udp listener
 ZIA_UPSTREAM=ws://domain.tld:1234 # your zia server instance (ws(s) or tcp(s))
 # ZIA_PROXY=http://user:pass@proxy.tld:8080 # optional http(s) proxy
+# ZIA_COUNT=4 # count of websocket connecttions that should be used, useful if traffic is limited per proxy connection
+# ZIA_WS_MASKING=1 # enable to conform with websocket spec, disabled by default to process data in zero-copy fashion 
 ```
 
 If you are using the binary use `--help` to the all available options.
